@@ -1,6 +1,7 @@
 import { ArrowLeft, MapPinned } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "./components/AppShell";
+import { BrandMark } from "./components/BrandMark";
 import { AppLink, matchRoute, navigate, useRoute } from "./components/Router";
 import {
   getCurrentAppSession,
@@ -80,9 +81,7 @@ export default function App() {
   if (!authReady) {
     return (
       <main className="auth-loading" aria-live="polite">
-        <span className="brand-mark" aria-hidden="true">
-          NSP
-        </span>
+        <BrandMark />
         <p>Ověřujeme přihlášení…</p>
       </main>
     );

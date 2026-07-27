@@ -8,6 +8,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { type FormEvent, useState } from "react";
+import { BrandMark } from "../components/BrandMark";
 import { Button, Field } from "../components/Ui";
 
 export function LoginPage({
@@ -64,9 +65,7 @@ export function LoginPage({
       <section className="login-story" aria-label="O aplikaci">
         <div className="login-story__content">
           <div className="login-brand">
-            <span className="brand-mark brand-mark--light" aria-hidden="true">
-              NSP
-            </span>
+            <BrandMark className="brand-mark--light" />
             <div>
               <strong>Národopisný soubor Postřekov</strong>
               <span>Docházka a taneční páry</span>
@@ -112,7 +111,7 @@ export function LoginPage({
       <section className="login-panel">
         <div className="login-card">
           <div className="login-card__heading">
-            <span className="mobile-login-logo">NSP</span>
+            <BrandMark className="mobile-login-logo" />
             <span className="eyebrow">Vítejte zpět</span>
             <h2>Přihlášení do aplikace</h2>
             <p>Zvolte způsob přístupu podle své role.</p>

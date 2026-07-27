@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import type { SessionUser } from "../lib/demoData";
+import { BrandMark } from "./BrandMark";
 import { AppLink } from "./Router";
 
 const navigation = [
@@ -60,12 +61,10 @@ export function AppShell({
         className={`sidebar ${mobileMenuOpen ? "is-open" : ""}`}
       >
         <div className="sidebar__brand">
-          <span className="brand-mark" aria-hidden="true">
-            NSP
-          </span>
+          <BrandMark />
           <div>
-            <strong>Postřekov</strong>
-            <span>docházka a páry</span>
+            <strong>Národopisný soubor</strong>
+            <span>Postřekov · docházka a páry</span>
           </div>
           <button
             aria-label="Zavřít nabídku"
@@ -148,7 +147,7 @@ export function AppShell({
             <Menu aria-hidden="true" />
           </button>
           <AppLink className="mobile-brand" to="/">
-            <span aria-hidden="true">NSP</span>
+            <BrandMark />
             <strong>Postřekov</strong>
           </AppLink>
           {canOpenSettings ? (

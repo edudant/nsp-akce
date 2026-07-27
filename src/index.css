@@ -7,32 +7,32 @@
   background: #f4f0e7;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --green-950: #0d2a23;
-  --green-900: #12382e;
-  --green-800: #1a4a3d;
-  --green-700: #28614f;
-  --green-100: #dce9e2;
-  --green-50: #edf4f0;
-  --red-800: #842627;
-  --red-700: #a33333;
-  --red-100: #f5dddd;
-  --red-50: #fbefee;
-  --amber-700: #916316;
-  --amber-100: #f7e7bd;
-  --amber-50: #fdf7e8;
-  --blue-700: #356481;
-  --blue-100: #dceaf2;
-  --blue-50: #eef6fa;
-  --paper: #fbfaf6;
+  --green-950: #142a47;
+  --green-900: #244a70;
+  --green-800: #34587c;
+  --green-700: #46759a;
+  --green-100: #dce8f0;
+  --green-50: #eef4f7;
+  --red-800: #8c1e28;
+  --red-700: #b32632;
+  --red-100: #f5dfe1;
+  --red-50: #fbefef;
+  --amber-700: #876318;
+  --amber-100: #f4e5b9;
+  --amber-50: #fcf7e9;
+  --blue-700: #315f83;
+  --blue-100: #dce9f2;
+  --blue-50: #edf5fa;
+  --paper: #faf8f2;
   --paper-strong: #ffffff;
-  --canvas: #f4f0e7;
-  --ink: #19251f;
-  --muted: #68736d;
-  --muted-strong: #4e5b54;
-  --border: #dcd9cf;
-  --border-soft: #ebe7dd;
-  --shadow-sm: 0 1px 2px rgba(20, 40, 31, 0.06);
-  --shadow-md: 0 12px 35px rgba(20, 40, 31, 0.09);
+  --canvas: #f2efe7;
+  --ink: #26364a;
+  --muted: #6d7780;
+  --muted-strong: #4f5d69;
+  --border: #d9d6cd;
+  --border-soft: #e8e4da;
+  --shadow-sm: 0 2px 8px rgba(24, 42, 67, 0.06);
+  --shadow-md: 0 16px 42px rgba(24, 42, 67, 0.1);
   --radius-sm: 8px;
   --radius-md: 14px;
   --radius-lg: 20px;
@@ -53,7 +53,13 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background: var(--canvas);
+  background-color: var(--canvas);
+  background-image:
+    linear-gradient(rgba(250, 248, 242, 0.8), rgba(250, 248, 242, 0.8)),
+    url("./assets/postrekovo-ornament.jpg");
+  background-position: center top;
+  background-size: auto, 1280px auto;
+  background-attachment: fixed;
 }
 
 body,
@@ -227,7 +233,7 @@ textarea {
 .card {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
-  background: var(--paper-strong);
+  background: rgba(255, 255, 255, 0.96);
   box-shadow: var(--shadow-sm);
 }
 
@@ -616,8 +622,13 @@ textarea {
   display: flex;
   flex-direction: column;
   width: var(--sidebar-width);
-  color: #eef5f1;
-  background: var(--green-950);
+  color: #f3f6f9;
+  background-color: var(--green-950);
+  background-image:
+    linear-gradient(rgba(20, 42, 71, 0.96), rgba(20, 42, 71, 0.99)),
+    url("./assets/postrekovo-ornament.jpg");
+  background-position: center;
+  background-size: auto, 720px auto;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -635,19 +646,26 @@ textarea {
   place-items: center;
   width: 45px;
   height: 45px;
-  border: 2px solid var(--red-700);
-  border-radius: 50% 50% 45% 45%;
-  color: var(--green-950);
-  background: #f5e9cf;
-  font-family: Georgia, serif;
-  font-size: 0.78rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  box-shadow: inset 0 0 0 3px #f5e9cf, inset 0 0 0 5px var(--red-700);
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.88);
+  border-radius: 50%;
+  background: white;
+  box-shadow:
+    0 0 0 2px var(--red-700),
+    0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .brand-mark--light {
-  color: var(--green-950);
+  box-shadow:
+    0 0 0 2px #d84a4f,
+    0 8px 24px rgba(0, 0, 0, 0.26);
 }
 
 .sidebar__brand > div {
@@ -657,11 +675,12 @@ textarea {
 
 .sidebar__brand strong {
   font-family: Georgia, serif;
-  font-size: 1.16rem;
+  font-size: 0.98rem;
+  line-height: 1.1;
 }
 
 .sidebar__brand span {
-  color: #aebfb6;
+  color: #b8c8d8;
   font-size: 0.7rem;
 }
 
@@ -684,7 +703,7 @@ textarea {
   min-height: 46px;
   padding: 10px 12px;
   border-radius: 8px;
-  color: #b9c8c1;
+  color: #c1cfdd;
   font-size: 0.86rem;
   font-weight: 650;
   transition:
@@ -771,7 +790,7 @@ textarea {
 }
 
 .sidebar__profile span {
-  color: #9eb2a8;
+  color: #aebfd0;
   font-size: 0.66rem;
 }
 
@@ -783,7 +802,7 @@ textarea {
   padding: 0;
   border: 0;
   border-radius: 7px;
-  color: #9eb2a8;
+  color: #aebfd0;
   background: transparent;
   cursor: pointer;
 }
@@ -828,6 +847,8 @@ textarea {
   justify-content: space-between;
   gap: 24px;
   margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(52, 88, 124, 0.13);
 }
 
 .page-header__copy h1 {
@@ -897,14 +918,23 @@ textarea {
   display: grid;
   grid-template-columns: minmax(420px, 1.02fr) minmax(440px, 0.98fr);
   min-height: 100vh;
-  background: var(--paper);
+  background:
+    linear-gradient(rgba(250, 248, 242, 0.86), rgba(250, 248, 242, 0.86)),
+    url("./assets/postrekovo-ornament.jpg") center / 1050px auto;
 }
 
 .login-story {
   position: relative;
   overflow: hidden;
   color: white;
-  background: var(--green-950);
+  background:
+    linear-gradient(
+      90deg,
+      rgba(12, 27, 47, 0.9) 0%,
+      rgba(20, 42, 71, 0.76) 55%,
+      rgba(20, 42, 71, 0.56) 100%
+    ),
+    url("./assets/postrekovo-soubor.jpg") center / cover;
 }
 
 .login-story::before,
@@ -970,12 +1000,13 @@ textarea {
   color: white;
   font-size: clamp(2.5rem, 5vw, 4.7rem);
   line-height: 0.98;
+  text-shadow: 0 3px 24px rgba(0, 0, 0, 0.34);
 }
 
 .login-story__headline p {
   max-width: 520px;
   margin: 0;
-  color: #bdccc5;
+  color: #e1e8ef;
   font-size: 1rem;
   line-height: 1.7;
 }
@@ -997,7 +1028,8 @@ textarea {
   padding: 18px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(12, 30, 52, 0.46);
+  backdrop-filter: blur(5px);
 }
 
 .login-benefits li > svg {
@@ -1205,8 +1237,16 @@ textarea {
   overflow: hidden;
   padding: 25px;
   color: white;
-  background: var(--green-900);
-  border-color: var(--green-900);
+  background:
+    linear-gradient(
+      90deg,
+      rgba(15, 36, 61, 0.97) 0%,
+      rgba(27, 57, 88, 0.91) 58%,
+      rgba(27, 57, 88, 0.72) 100%
+    ),
+    url("./assets/postrekovo-soubor.jpg") center 43% / cover;
+  border-color: rgba(20, 42, 71, 0.5);
+  box-shadow: 0 16px 38px rgba(20, 42, 71, 0.16);
 }
 
 .next-event-card::after {
@@ -1229,7 +1269,7 @@ textarea {
 }
 
 .next-event-card .eyebrow {
-  color: #b8cbc2;
+  color: #d8e4ee;
 }
 
 .next-event-card__main {
@@ -1293,12 +1333,12 @@ textarea {
 }
 
 .next-event-card .event-meta {
-  color: #c3d0ca;
+  color: #d3dee8;
 }
 
 .next-event-card__content > p {
   margin: 14px 0 0;
-  color: #aebfb6;
+  color: #c5d3df;
   font-size: 0.76rem;
 }
 
@@ -1336,7 +1376,7 @@ textarea {
   width: 30px;
   height: 30px;
   margin-right: -8px;
-  border: 2px solid var(--green-900);
+  border: 2px solid #244a70;
   border-radius: 50%;
   color: var(--green-950);
   background: #dce9e2;
@@ -1353,7 +1393,7 @@ textarea {
 }
 
 .response-summary small {
-  color: #aebfb6;
+  color: #c5d3df;
   font-size: 0.66rem;
 }
 
@@ -4194,7 +4234,9 @@ tbody tr:hover {
     height: 58px;
     padding: 0 12px;
     border-bottom: 1px solid var(--border);
-    background: rgba(251, 250, 246, 0.96);
+    background:
+      linear-gradient(rgba(250, 248, 242, 0.94), rgba(250, 248, 242, 0.94)),
+      url("./assets/postrekovo-ornament.jpg") center / 780px auto;
     backdrop-filter: blur(12px);
   }
 
@@ -4219,17 +4261,14 @@ tbody tr:hover {
     font-family: Georgia, serif;
   }
 
-  .mobile-brand span {
+  .mobile-brand .brand-mark {
     display: grid;
     place-items: center;
     width: 29px;
     height: 29px;
-    border: 2px solid var(--red-700);
+    border: 1px solid white;
     border-radius: 50%;
-    color: var(--green-900);
-    font-family: system-ui, sans-serif;
-    font-size: 0.48rem;
-    font-weight: 900;
+    box-shadow: 0 0 0 1px var(--red-700);
   }
 
   .bottom-nav {
@@ -4245,8 +4284,8 @@ tbody tr:hover {
       calc(5px + env(safe-area-inset-bottom))
       max(5px, env(safe-area-inset-left));
     border-top: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.97);
-    box-shadow: 0 -8px 22px rgba(24, 39, 32, 0.07);
+    background: rgba(253, 252, 248, 0.97);
+    box-shadow: 0 -8px 22px rgba(24, 42, 67, 0.08);
     backdrop-filter: blur(12px);
   }
 
@@ -4750,13 +4789,12 @@ tbody tr:hover {
     width: 54px;
     height: 54px;
     margin-bottom: 20px;
-    border: 3px double var(--red-700);
+    border: 2px solid white;
     border-radius: 50%;
-    color: var(--green-900);
-    background: #f4e9d2;
-    font-family: Georgia, serif;
-    font-size: 0.7rem;
-    font-weight: 900;
+    background: white;
+    box-shadow:
+      0 0 0 2px var(--red-700),
+      0 8px 24px rgba(20, 42, 71, 0.14);
   }
 }
 
