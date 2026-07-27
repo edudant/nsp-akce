@@ -59,6 +59,8 @@ Databázová hesla a servisní klíče do frontendu ani repozitáře nepatří.
 
 Správci a zapisovatelé používají e-mailový magic link přes Supabase Auth.
 Členský náhled je pouze pro čtení a používá společný kód ověřovaný na serveru.
+Auth hook dovolí vytvořit trvalý účet pouze e-mailu na interním allowlistu;
+anonymní Auth relace jsou vyhrazené pro krátkodobý členský přístup.
 Oprávnění k tabulkám vynucují RLS politiky v databázi; skrytí prvku ve
 frontendovém rozhraní není bezpečnostní hranice.
 

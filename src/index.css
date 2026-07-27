@@ -1196,6 +1196,10 @@ textarea {
   gap: 20px;
 }
 
+.dashboard-grid--member {
+  grid-template-columns: 1fr;
+}
+
 .next-event-card {
   position: relative;
   overflow: hidden;

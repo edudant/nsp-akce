@@ -79,7 +79,11 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
         title="Co je nového v souboru"
       />
 
-      <section className="dashboard-grid">
+      <section
+        className={
+          canEdit ? "dashboard-grid" : "dashboard-grid dashboard-grid--member"
+        }
+      >
         {nextEvent ? (
           <Card className="next-event-card">
             <div className="next-event-card__topline">
@@ -149,55 +153,57 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
           </Card>
         ) : null}
 
-        <Card className="attention-card">
-          <div className="card-heading">
-            <div>
-              <span className="eyebrow">Vyžaduje pozornost</span>
-              <h2>Na čem zapracovat</h2>
+        {canEdit ? (
+          <Card className="attention-card">
+            <div className="card-heading">
+              <div>
+                <span className="eyebrow">Vyžaduje pozornost</span>
+                <h2>Na čem zapracovat</h2>
+              </div>
+              <Badge tone={missingResponses ? "red" : "green"}>
+                {missingResponses || pairingEvent ? "K řešení" : "Hotovo"}
+              </Badge>
             </div>
-            <Badge tone={missingResponses ? "red" : "green"}>
-              {missingResponses || pairingEvent ? "K řešení" : "Hotovo"}
-            </Badge>
-          </div>
-          <div className="attention-list">
-            {responseEvent ? (
-              <AppLink to={`/udalosti/${responseEvent.id}`}>
-                <span className="attention-icon attention-icon--red">
-                  <AlertCircle aria-hidden="true" />
-                </span>
-                <span>
-                  <strong>Chybí odpovědi na vystoupení</strong>
-                  <small>{missingResponses} členů zatím nepotvrdilo účast</small>
-                </span>
-                <ArrowRight aria-hidden="true" />
-              </AppLink>
-            ) : null}
-            {pairingEvent ? (
-              <AppLink to={`/pary?event=${pairingEvent.id}`}>
-                <span className="attention-icon attention-icon--amber">
-                  <UsersRound aria-hidden="true" />
-                </span>
-                <span>
-                  <strong>Připravit páry</strong>
-                  <small>{pairingEvent.title} zatím nemá zveřejněný návrh</small>
-                </span>
-                <ArrowRight aria-hidden="true" />
-              </AppLink>
-            ) : null}
-            {!responseEvent && !pairingEvent ? (
-              <AppLink to="/udalosti">
-                <span className="attention-icon attention-icon--green">
-                  <CheckCircle2 aria-hidden="true" />
-                </span>
-                <span>
-                  <strong>Všechno je připravené</strong>
-                  <small>Žádný otevřený úkol teď nečeká.</small>
-                </span>
-                <ArrowRight aria-hidden="true" />
-              </AppLink>
-            ) : null}
-          </div>
-        </Card>
+            <div className="attention-list">
+              {responseEvent ? (
+                <AppLink to={`/udalosti/${responseEvent.id}`}>
+                  <span className="attention-icon attention-icon--red">
+                    <AlertCircle aria-hidden="true" />
+                  </span>
+                  <span>
+                    <strong>Chybí odpovědi na vystoupení</strong>
+                    <small>{missingResponses} členů zatím nepotvrdilo účast</small>
+                  </span>
+                  <ArrowRight aria-hidden="true" />
+                </AppLink>
+              ) : null}
+              {pairingEvent ? (
+                <AppLink to={`/pary?event=${pairingEvent.id}`}>
+                  <span className="attention-icon attention-icon--amber">
+                    <UsersRound aria-hidden="true" />
+                  </span>
+                  <span>
+                    <strong>Připravit páry</strong>
+                    <small>{pairingEvent.title} zatím nemá zveřejněný návrh</small>
+                  </span>
+                  <ArrowRight aria-hidden="true" />
+                </AppLink>
+              ) : null}
+              {!responseEvent && !pairingEvent ? (
+                <AppLink to="/udalosti">
+                  <span className="attention-icon attention-icon--green">
+                    <CheckCircle2 aria-hidden="true" />
+                  </span>
+                  <span>
+                    <strong>Všechno je připravené</strong>
+                    <small>Žádný otevřený úkol teď nečeká.</small>
+                  </span>
+                  <ArrowRight aria-hidden="true" />
+                </AppLink>
+              ) : null}
+            </div>
+          </Card>
+        ) : null}
       </section>
 
       <section className="stat-grid" aria-label="Souhrn sezony">
@@ -268,23 +274,23 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
           <div className="card-heading">
             <div>
               <span className="eyebrow">Rychlé volby</span>
-              <h2>Co chcete udělat?</h2>
+              <h2>{canEdit ? "Co chcete udělat?" : "Kam se chcete podívat?"}</h2>
             </div>
           </div>
           <div className="quick-actions">
             <AppLink to={nextEvent ? `/udalosti/${nextEvent.id}` : "/udalosti"}>
               <span><UserCheck aria-hidden="true" /></span>
-              Zapsat docházku
+              {canEdit ? "Zapsat docházku" : "Zobrazit nejbližší událost"}
               <ArrowRight aria-hidden="true" />
             </AppLink>
             <AppLink to="/pary">
               <span><Sparkles aria-hidden="true" /></span>
-              Vygenerovat páry
+              {canEdit ? "Vygenerovat páry" : "Zobrazit zveřejněné páry"}
               <ArrowRight aria-hidden="true" />
             </AppLink>
             <AppLink to="/body">
               <span><Medal aria-hidden="true" /></span>
-              Zkontrolovat body
+              {canEdit ? "Zkontrolovat body" : "Zobrazit body"}
               <ArrowRight aria-hidden="true" />
             </AppLink>
           </div>

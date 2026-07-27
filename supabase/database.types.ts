@@ -993,6 +993,10 @@ export type Database = {
         Args: { required_role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
       }
+      hook_allow_staff_or_anonymous_signup: {
+        Args: { event: Json }
+        Returns: Json
+      }
       is_admin: { Args: never; Returns: boolean }
       is_staff: { Args: never; Returns: boolean }
       publish_pairing_run: {
