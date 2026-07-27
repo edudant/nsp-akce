@@ -3004,6 +3004,11 @@ tbody tr:hover {
   padding: 21px;
 }
 
+.published-pairs-filter {
+  grid-template-columns: minmax(240px, 0.8fr) minmax(280px, 1.2fr);
+  align-items: end;
+}
+
 .selected-event-summary {
   display: grid;
   gap: 3px;
@@ -3369,6 +3374,10 @@ tbody tr:hover {
 
 .pair-card.is-locked {
   background: var(--amber-50);
+}
+
+.pair-card--published > .badge {
+  justify-self: end;
 }
 
 .pair-number {
@@ -4814,6 +4823,11 @@ tbody tr:hover {
     grid-template-columns: auto 1fr auto;
   }
 
+  .pair-card--published > .badge {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
   .pair-person {
     grid-column: 2;
   }
@@ -4863,6 +4877,10 @@ tbody tr:hover {
   .form-grid,
   .form-grid--3,
   .event-type-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .published-pairs-filter {
     grid-template-columns: 1fr;
   }
 

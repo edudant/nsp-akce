@@ -558,6 +558,7 @@ async function getEvent(id: string): Promise<EnsembleEvent | null> {
       followerId: pair.memberBId,
       round: pair.roundNumber,
       reason: pair.explanation,
+      actual: event.status === "closed",
     })),
     pairsPublished: pairs.length > 0,
   };

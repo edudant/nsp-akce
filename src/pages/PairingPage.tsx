@@ -16,10 +16,11 @@ import {
   WandSparkles,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { appApi } from "../lib/dataApi";
 import {
   type DancePair,
+  type EnsembleEvent,
   type Member,
   type PairPreference,
 } from "../lib/demoData";
@@ -66,17 +67,29 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
   const [candidateSearch, setCandidateSearch] = useState("");
   const [saved, setSaved] = useState("");
   const availableEvents = database.data?.events ?? [];
+  const selectableEvents = availableEvents.filter(
+    (event) => event.status !== "cancelled",
+  );
   const fallbackEvent =
-    [...availableEvents]
-      .filter((event) => event.status !== "cancelled")
+    [...selectableEvents]
       .sort((first, second) => first.date.localeCompare(second.date))
       .find((event) => event.date >= todayInPrague()) ??
+    [...selectableEvents].sort((first, second) =>
+      second.date.localeCompare(first.date),
+    )[0] ??
     availableEvents[0];
   const resolvedEventId = availableEvents.some(
     (event) => event.id === eventId,
   )
     ? eventId
     : (fallbackEvent?.id ?? eventId);
+  const eventQueryKey = ["event", resolvedEventId] as const;
+  const publishedEventQuery = useQuery({
+    queryKey: eventQueryKey,
+    queryFn: () => appApi.getEvent(resolvedEventId),
+    enabled: !canEdit && Boolean(resolvedEventId),
+    staleTime: 20_000,
+  });
 
   const saveMutation = useMutation({
     mutationFn: ({ pairs, publish }: { pairs: DancePair[]; publish: boolean }) =>
@@ -107,9 +120,10 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
     },
   });
 
-  const selectedEvent = database.data?.events.find(
-    (event) => event.id === resolvedEventId,
-  );
+  const selectedEvent = canEdit
+    ? database.data?.events.find((event) => event.id === resolvedEventId)
+    : (publishedEventQuery.data ??
+      database.data?.events.find((event) => event.id === resolvedEventId));
   const activeMembers = useMemo(
     () => database.data?.members.filter((member) => member.active) ?? [],
     [database.data],
@@ -135,9 +149,34 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
       ? selection.ids
       : defaultSelectedIds;
 
-  if (database.isLoading) return <LoadingState label="Připravuji generátor párů…" />;
-  if (database.isError || !database.data) {
-    return <ErrorState onRetry={() => void database.refetch()} />;
+  if (database.isLoading || (!canEdit && publishedEventQuery.isLoading)) {
+    return (
+      <LoadingState
+        label={canEdit ? "Připravuji generátor párů…" : "Načítám zveřejněné páry…"}
+      />
+    );
+  }
+  if (database.isError || !database.data || publishedEventQuery.isError) {
+    return (
+      <ErrorState
+        onRetry={() => {
+          void database.refetch();
+          if (!canEdit) void publishedEventQuery.refetch();
+        }}
+      />
+    );
+  }
+
+  if (!canEdit) {
+    return (
+      <PublishedPairsView
+        event={publishedEventQuery.data ?? null}
+        eventId={resolvedEventId}
+        events={database.data.events}
+        members={database.data.members}
+        onEventChange={setEventId}
+      />
+    );
   }
 
   const selectedMembers = activeMembers.filter((member) =>
@@ -587,6 +626,165 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
         </section>
       </div>
     </div>
+  );
+}
+
+function PublishedPairsView({
+  events,
+  members,
+  event,
+  eventId,
+  onEventChange,
+}: {
+  events: EnsembleEvent[];
+  members: Member[];
+  event: EnsembleEvent | null;
+  eventId: string;
+  onEventChange: (eventId: string) => void;
+}) {
+  const selectedEvent =
+    event ?? events.find((availableEvent) => availableEvent.id === eventId);
+  const publishedPairs =
+    selectedEvent?.pairsPublished === true ? selectedEvent.pairs : [];
+  const rounds = [...new Set(publishedPairs.map((pair) => pair.round))].sort(
+    (first, second) => first - second,
+  );
+
+  return (
+    <div className="page">
+      <PageHeader
+        description="Vyberte událost a podívejte se na dvojice zveřejněné vedením souboru."
+        eyebrow="Členský přehled"
+        title="Zveřejněné taneční páry"
+      />
+
+      <Card className="pairing-setup published-pairs-filter">
+        <label className="field">
+          <span className="field__label">Událost</span>
+          <Select
+            onChange={(event) => onEventChange(event.target.value)}
+            value={eventId}
+          >
+            {[...events]
+              .filter((event) => event.status !== "cancelled")
+              .sort((first, second) => second.date.localeCompare(first.date))
+              .map((event) => (
+                <option key={event.id} value={event.id}>
+                  {formatDate(event.date, "d. M.")} · {event.title}
+                </option>
+              ))}
+          </Select>
+        </label>
+
+        {selectedEvent ? (
+          <div className="selected-event-summary">
+            <EventTypeBadge type={selectedEvent.type} />
+            <strong>{selectedEvent.title}</strong>
+            <span>
+              {formatDate(selectedEvent.date)} · {selectedEvent.location}
+            </span>
+          </div>
+        ) : null}
+      </Card>
+
+      {publishedPairs.length > 0 ? (
+        <section className="pairing-results" aria-label="Zveřejněné páry">
+          {rounds.map((round) => {
+            const roundPairs = publishedPairs.filter(
+              (pair) => pair.round === round,
+            );
+            return (
+              <Card className="pair-round" key={round}>
+                <header>
+                  <div>
+                    <span>Kolo {round}</span>
+                    <h2>
+                      {roundPairs.length}{" "}
+                      {roundPairs.length === 1 ? "pár" : "párů"}
+                    </h2>
+                  </div>
+                  <Badge tone="green">Zveřejněno</Badge>
+                </header>
+                <div className="generated-pairs">
+                  {roundPairs.map((pair, index) => {
+                    const leader = members.find(
+                      (member) => member.id === pair.leaderId,
+                    );
+                    const follower = members.find(
+                      (member) => member.id === pair.followerId,
+                    );
+                    if (!leader || !follower) return null;
+                    return (
+                      <PublishedPairCard
+                        actual={Boolean(pair.actual)}
+                        follower={follower}
+                        index={index}
+                        key={pair.id}
+                        leader={leader}
+                      />
+                    );
+                  })}
+                </div>
+              </Card>
+            );
+          })}
+        </section>
+      ) : (
+        <Card className="pairing-empty">
+          <span className="pairing-empty__art" aria-hidden="true">
+            <Sparkles />
+            <UsersRound />
+          </span>
+          <span className="eyebrow">Zatím bez zveřejněných párů</span>
+          <h2>Vedení souboru páry pro tuto událost ještě nezveřejnilo</h2>
+          <p>
+            Jakmile bude návrh připravený, objeví se na této stránce automaticky.
+          </p>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function PublishedPairCard({
+  leader,
+  follower,
+  index,
+  actual,
+}: {
+  leader: Member;
+  follower: Member;
+  index: number;
+  actual: boolean;
+}) {
+  return (
+    <article className="pair-card pair-card--published">
+      <span className="pair-number">{index + 1}</span>
+      <div className="pair-person">
+        <Avatar member={leader} />
+        <span>
+          <strong>{leader.fullName}</strong>
+          <small>
+            Tanečník · <ExperienceBadge level={leader.experience} />
+          </small>
+        </span>
+      </div>
+      <span className="pair-join" aria-hidden="true">
+        <Sparkles />
+      </span>
+      <div className="pair-person">
+        <Avatar member={follower} />
+        <span>
+          <strong>{follower.fullName}</strong>
+          <small>
+            Tanečnice · <ExperienceBadge level={follower.experience} />
+          </small>
+        </span>
+      </div>
+      <Badge tone={actual ? "green" : "amber"}>
+        {actual ? "Odtančeno" : "Naplánováno"}
+      </Badge>
+    </article>
   );
 }
 
