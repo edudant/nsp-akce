@@ -64,7 +64,7 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
   ).length;
 
   return (
-    <div className="page">
+    <div className="page page--dashboard">
       <PageHeader
         actions={
           canEdit ? (
@@ -151,7 +151,27 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
               </AppLink>
             </div>
           </Card>
-        ) : null}
+        ) : (
+          <Card className="next-event-card next-event-card--empty">
+            <span className="next-event-empty__icon" aria-hidden="true">
+              <CalendarRange />
+            </span>
+            <div className="next-event-empty__copy">
+              <span className="eyebrow">Další společný termín</span>
+              <h2>Zatím není naplánovaná další událost</h2>
+              <p>
+                Jakmile vedení přidá nový termín, objeví se na tomto místě.
+              </p>
+            </div>
+            <AppLink
+              className="button button--secondary button--medium"
+              to="/udalosti"
+            >
+              Projít všechny události
+              <ArrowRight aria-hidden="true" />
+            </AppLink>
+          </Card>
+        )}
 
         {canEdit ? (
           <Card className="attention-card">
@@ -251,7 +271,7 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
             </AppLink>
           </div>
           <div className="upcoming-list">
-            {upcoming.slice(0, 4).map((event) => (
+            {upcoming.length ? upcoming.slice(0, 4).map((event) => (
               <AppLink key={event.id} to={`/udalosti/${event.id}`}>
                 <span className={`mini-date mini-date--${event.type}`}>
                   <strong>{formatDate(event.date, "d")}</strong>
@@ -266,7 +286,15 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
                 <EventTypeBadge type={event.type} />
                 <ArrowRight aria-hidden="true" className="row-arrow" />
               </AppLink>
-            ))}
+            )) : (
+              <div className="upcoming-list__empty">
+                <CalendarRange aria-hidden="true" />
+                <span>
+                  <strong>Kalendář je zatím volný</strong>
+                  <small>Nové termíny se tu objeví automaticky.</small>
+                </span>
+              </div>
+            )}
           </div>
         </Card>
 
@@ -297,12 +325,13 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
         </Card>
       </section>
 
-      <div className="demo-notice" role="note">
-        <span>TESTOVACÍ DATA</span>
-        {isSupabaseConfigured
-          ? " Nasazená databáze nyní obsahuje pouze smyšlená jména a ukázkovou docházku. Změny se ukládají do Supabase."
-          : " Pracujete v místním ukázkovém režimu. Změny zůstanou uložené jen v tomto prohlížeči."}
-      </div>
+      {!isSupabaseConfigured ? (
+        <div className="demo-notice" role="note">
+          <span>UKÁZKOVÝ REŽIM</span>
+          Pracujete s místními testovacími daty. Změny zůstanou uložené jen
+          v tomto prohlížeči.
+        </div>
+      ) : null}
     </div>
   );
 }

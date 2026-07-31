@@ -42,8 +42,10 @@ Příkaz spustí lint, automatické testy a produkční build.
 
 ## Databáze
 
-Verzované SQL migrace jsou v `supabase/migrations`. Testovací data jsou smyšlená
-a neobsahují údaje skutečných členů souboru.
+Verzované SQL migrace jsou v `supabase/migrations`. Produkční data byla načtena
+ze soukromého pracovního sešitu přímo do Supabase; jména, docházka ani importní
+SQL s osobními údaji nejsou součástí veřejného repozitáře. `supabase/seed.sql`
+zůstává záměrně bez členských dat.
 
 ## Nasazení
 
@@ -64,8 +66,8 @@ anonymní Auth relace jsou vyhrazené pro krátkodobý členský přístup.
 Oprávnění k tabulkám vynucují RLS politiky v databázi; skrytí prvku ve
 frontendovém rozhraní není bezpečnostní hranice.
 
-## Testovací data
+## Data
 
-Počáteční nasazení obsahuje pouze smyšlená česká jména, události, docházku a
-párovací preference. Skutečný Excel ani osobní údaje členů nejsou v repozitáři
-ani v nasazené databázi.
+Lokální režim bez připojeného Supabase používá smyšlená ukázková data. Produkční
+Supabase obsahuje skutečná data souboru importovaná ze soukromého Excelu.
+Zdrojový Excel a osobní údaje členů zůstávají mimo veřejný GitHub.

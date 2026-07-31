@@ -161,7 +161,10 @@ export function AppShell({
 
         <main id="main-content">{children}</main>
 
-        <nav aria-label="Mobilní navigace" className="bottom-nav">
+        <nav
+          aria-label="Mobilní navigace"
+          className={`bottom-nav bottom-nav--${availableNavigation.length}`}
+        >
           {availableNavigation.map((item) => {
             const Icon = item.icon;
             const active = pathIsActive(currentPath, item.path);

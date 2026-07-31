@@ -109,6 +109,10 @@ export function LoginPage({
       </section>
 
       <section className="login-panel">
+        <div className="mobile-login-hero" aria-hidden="true">
+          <span>Tradice, která nás spojuje</span>
+          <strong>Národopisný soubor Postřekov</strong>
+        </div>
         <div className="login-card">
           <div className="login-card__heading">
             <BrandMark className="mobile-login-logo" />
@@ -165,7 +169,6 @@ export function LoginPage({
                     <Mail aria-hidden="true" />
                     <input
                       autoComplete="email"
-                      autoFocus
                       id="login-email"
                       onChange={(event) => setEmail(event.target.value)}
                       placeholder="vedouci@postrekovo.cz"
@@ -194,7 +197,6 @@ export function LoginPage({
                     <KeyRound aria-hidden="true" />
                     <input
                       autoComplete="one-time-code"
-                      autoFocus
                       id="login-code"
                       onChange={(event) => setCode(event.target.value)}
                       placeholder="••••••••"
