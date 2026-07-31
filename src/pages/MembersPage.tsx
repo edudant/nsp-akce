@@ -1,26 +1,39 @@
 import {
+  Clock3,
+  Mail,
   MoreHorizontal,
   Plus,
   Search,
+  Send,
   ShieldCheck,
   UserCheck,
   UserPlus,
   UsersRound,
 } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { appApi } from "../lib/dataApi";
 import {
+  attendanceLabels,
+  calculateScores,
+  eventTypeLabels,
   experienceLabels,
+  interestLabels,
   roleLabels,
+  type AppRole,
   type ExperienceLevel,
   type Member,
+  type MemberHistoryEntry,
   type PairingRole,
-} from "../lib/demoData";
+  type ScoreRow,
+} from "../lib/domain";
 import { databaseQueryKey, useDatabase } from "../components/DataContext";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataStates";
-import { todayInPrague } from "../components/formatters";
-import { formatDate } from "../components/formatters";
+import {
+  formatDate,
+  formatPoints,
+  todayInPrague,
+} from "../components/formatters";
 import { PageHeader } from "../components/PageHeader";
 import {
   Avatar,
@@ -35,6 +48,14 @@ import {
   Toggle,
 } from "../components/Ui";
 
+interface MemberEditorInput {
+  profile: Omit<Member, "id" | "account">;
+  account: {
+    email: string | null;
+    role: AppRole;
+  };
+}
+
 export function MembersPage({ canEdit }: { canEdit: boolean }) {
   const database = useDatabase();
   const queryClient = useQueryClient();
@@ -42,22 +63,70 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
   const [status, setStatus] = useState<"active" | "all" | "inactive">("active");
   const [role, setRole] = useState<"all" | PairingRole>("all");
   const [editing, setEditing] = useState<Member | "new" | null>(null);
+  const editingMemberId =
+    editing !== null && editing !== "new" ? editing.id : null;
 
-  const addMutation = useMutation({
-    mutationFn: appApi.addMember,
+  const memberHistoryQuery = useQuery({
+    queryKey: ["member-history", editingMemberId],
+    queryFn: () =>
+      editingMemberId ? appApi.getMemberHistory(editingMemberId) : [],
+    enabled: Boolean(canEdit && editingMemberId),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async ({
+      target,
+      input,
+    }: {
+      target: Member | "new";
+      input: MemberEditorInput;
+    }) => {
+      const savedMember =
+        target === "new"
+          ? await appApi.addMember(input.profile)
+          : await appApi.updateMember(target.id, input.profile);
+
+      const existingAccount = target === "new" ? undefined : target.account;
+      if (input.account.email || existingAccount) {
+        await appApi.updateMemberAccount(
+          savedMember.id,
+          input.account.email,
+          input.account.role,
+        );
+      }
+
+      return savedMember;
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: databaseQueryKey });
       setEditing(null);
     },
   });
-  const updateMutation = useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<Member> }) =>
-      appApi.updateMember(id, patch),
-    onSuccess: async () => {
+  const invitationMutation = useMutation({
+    mutationFn: appApi.sendMemberInvitation,
+    onSuccess: async (account) => {
+      setEditing((current) =>
+        current !== null &&
+        current !== "new" &&
+        current.id === account.memberId
+          ? { ...current, account }
+          : current,
+      );
       await queryClient.invalidateQueries({ queryKey: databaseQueryKey });
-      setEditing(null);
     },
   });
+
+  const openEditor = (member: Member | "new") => {
+    saveMutation.reset();
+    invitationMutation.reset();
+    setEditing(member);
+  };
+
+  const closeEditor = () => {
+    saveMutation.reset();
+    invitationMutation.reset();
+    setEditing(null);
+  };
 
   const filteredMembers = useMemo(() => {
     if (!database.data) return [];
@@ -88,13 +157,23 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
   const beginners = activeMembers.filter(
     (member) => member.experience === "beginner",
   ).length;
+  const fallbackHistory =
+    editingMemberId === database.data.myMemberId
+      ? database.data.myHistory
+      : undefined;
+  const memberHistory = memberHistoryQuery.data ?? fallbackHistory;
+  const memberScore = editingMemberId
+    ? calculateScores(database.data).find(
+        (score) => score.member.id === editingMemberId,
+      )
+    : undefined;
 
   return (
     <div className="page">
       <PageHeader
         actions={
           canEdit ? (
-            <Button onClick={() => setEditing("new")}>
+            <Button onClick={() => openEditor("new")}>
               <UserPlus aria-hidden="true" />
               Přidat člena
             </Button>
@@ -196,6 +275,7 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
                   <th scope="col">Zkušenost</th>
                   <th scope="col">Členem od</th>
                   <th scope="col">Stav</th>
+                  <th scope="col">Účet</th>
                   <th scope="col">
                     <span className="sr-only">Akce</span>
                   </th>
@@ -203,7 +283,29 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
               </thead>
               <tbody>
                 {filteredMembers.map((member) => (
-                  <tr key={member.id}>
+                  <tr
+                    aria-label={
+                      canEdit
+                        ? `Otevřít detail člena ${member.fullName}`
+                        : undefined
+                    }
+                    className={canEdit ? "is-clickable" : undefined}
+                    key={member.id}
+                    onClick={() => {
+                      if (canEdit) openEditor(member);
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        canEdit &&
+                        event.target === event.currentTarget &&
+                        (event.key === "Enter" || event.key === " ")
+                      ) {
+                        event.preventDefault();
+                        openEditor(member);
+                      }
+                    }}
+                    tabIndex={canEdit ? 0 : undefined}
+                  >
                     <td>
                       <div className="member-cell">
                         <Avatar member={member} />
@@ -225,11 +327,17 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
                         {member.active ? "Aktivní" : "Neaktivní"}
                       </Badge>
                     </td>
+                    <td data-label="Účet">
+                      <MemberAccountStatus member={member} />
+                    </td>
                     <td>
                       {canEdit ? (
                         <IconButton
                           label={`Upravit člena ${member.fullName}`}
-                          onClick={() => setEditing(member)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openEditor(member);
+                          }}
                         >
                           <MoreHorizontal aria-hidden="true" />
                         </IconButton>
@@ -249,33 +357,77 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
       </Card>
 
       <MemberDialog
-        error={addMutation.error?.message ?? updateMutation.error?.message}
-        loading={addMutation.isPending || updateMutation.isPending}
+        error={saveMutation.error?.message}
+        history={memberHistory}
+        historyError={
+          !fallbackHistory && memberHistoryQuery.isError
+            ? memberHistoryQuery.error.message
+            : undefined
+        }
+        historyLoading={memberHistoryQuery.isLoading && !fallbackHistory}
+        invitationError={invitationMutation.error?.message}
+        invitationLoading={invitationMutation.isPending}
+        loading={saveMutation.isPending}
         member={editing}
-        onClose={() => setEditing(null)}
+        score={memberScore}
+        onClose={closeEditor}
+        onInvite={(memberId) => invitationMutation.mutate(memberId)}
         onSave={(input) => {
-          if (editing === "new") addMutation.mutate(input);
-          else if (editing) {
-            updateMutation.mutate({ id: editing.id, patch: input });
-          }
+          if (editing) saveMutation.mutate({ target: editing, input });
         }}
       />
     </div>
   );
 }
 
+function MemberAccountStatus({ member }: { member: Member }) {
+  const account = member.account;
+
+  return (
+    <div className="member-account-status">
+      {account?.activatedAt ? (
+        <Badge tone="green">Účet aktivní</Badge>
+      ) : account?.email ? (
+        <Badge tone="amber">Čeká na přihlášení</Badge>
+      ) : (
+        <Badge tone="neutral">Bez e-mailu</Badge>
+      )}
+      {account?.email ? (
+        <small title={account.email}>{account.email}</small>
+      ) : null}
+      {account?.email ? (
+        <small>{account.role === "admin" ? "Správce" : "Uživatel"}</small>
+      ) : null}
+    </div>
+  );
+}
+
 function MemberDialog({
   member,
+  score,
   loading,
   error,
+  invitationLoading,
+  invitationError,
+  history,
+  historyLoading,
+  historyError,
   onClose,
+  onInvite,
   onSave,
 }: {
   member: Member | "new" | null;
+  score?: ScoreRow;
   loading: boolean;
   error?: string;
+  invitationLoading: boolean;
+  invitationError?: string;
+  history?: MemberHistoryEntry[];
+  historyLoading: boolean;
+  historyError?: string;
   onClose: () => void;
-  onSave: (input: Omit<Member, "id">) => void;
+  onInvite: (memberId: string) => void;
+  onSave: (input: MemberEditorInput) => void;
 }) {
   return (
     <Dialog
@@ -286,15 +438,23 @@ function MemberDialog({
       }
       onClose={onClose}
       open={member !== null}
+      size="large"
       title={member === "new" ? "Přidat člena" : "Upravit člena"}
     >
       {member ? (
         <MemberForm
           error={error}
+          history={history}
+          historyError={historyError}
+          historyLoading={historyLoading}
+          invitationError={invitationError}
+          invitationLoading={invitationLoading}
           key={member === "new" ? "new" : member.id}
           loading={loading}
           member={member === "new" ? undefined : member}
+          score={score}
           onCancel={onClose}
+          onInvite={onInvite}
           onSave={onSave}
         />
       ) : null}
@@ -304,16 +464,30 @@ function MemberDialog({
 
 function MemberForm({
   member,
+  score,
   loading,
   error,
+  invitationLoading,
+  invitationError,
+  history,
+  historyLoading,
+  historyError,
   onCancel,
+  onInvite,
   onSave,
 }: {
   member?: Member;
+  score?: ScoreRow;
   loading: boolean;
   error?: string;
+  invitationLoading: boolean;
+  invitationError?: string;
+  history?: MemberHistoryEntry[];
+  historyLoading: boolean;
+  historyError?: string;
   onCancel: () => void;
-  onSave: (input: Omit<Member, "id">) => void;
+  onInvite: (memberId: string) => void;
+  onSave: (input: MemberEditorInput) => void;
 }) {
   const [fullName, setFullName] = useState(member?.fullName ?? "");
   const [shortName, setShortName] = useState(member?.shortName ?? "");
@@ -326,19 +500,33 @@ function MemberForm({
   );
   const [active, setActive] = useState(member?.active ?? true);
   const [note, setNote] = useState(member?.note ?? "");
+  const [email, setEmail] = useState(member?.account?.email ?? "");
+  const [accountRole, setAccountRole] = useState<AppRole>(
+    member?.account?.role ?? "member",
+  );
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     onSave({
-      fullName,
-      shortName: shortName || fullName,
-      role,
-      experience,
-      joinedAt,
-      active,
-      note: note || undefined,
+      profile: {
+        fullName,
+        shortName: shortName || fullName,
+        role,
+        experience,
+        joinedAt,
+        active,
+        note: note || undefined,
+      },
+      account: {
+        email: normalizeEmail(email) || null,
+        role: accountRole,
+      },
     });
   };
+
+  const savedEmail = normalizeEmail(member?.account?.email ?? "");
+  const emailChanged = normalizeEmail(email) !== savedEmail;
+  const accountActive = Boolean(member?.account?.activatedAt);
 
   return (
     <form className="dialog-form" onSubmit={submit}>
@@ -415,6 +603,102 @@ function MemberForm({
         label="Aktivní člen"
         onChange={setActive}
       />
+
+      <section className="member-account-editor">
+        <header>
+          <span className="member-account-editor__icon">
+            <Mail aria-hidden="true" />
+          </span>
+          <span>
+            <strong>Přístup do aplikace</strong>
+            <small>E-mail slouží pro přihlášení odkazem i kódem.</small>
+          </span>
+        </header>
+
+        <div className="form-grid">
+          <Field
+            hint="Bez uloženého e-mailu se člen nemůže přihlásit."
+            htmlFor="member-email"
+            label="Přihlašovací e-mail"
+          >
+            <input
+              autoComplete="email"
+              id="member-email"
+              inputMode="email"
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="clen@example.cz"
+              type="email"
+              value={email}
+            />
+          </Field>
+          <Field
+            hint="Správce může měnit členy, docházku a nastavení."
+            htmlFor="member-account-role"
+            label="Role účtu"
+          >
+            <Select
+              id="member-account-role"
+              onChange={(event) =>
+                setAccountRole(event.target.value as AppRole)
+              }
+              value={accountRole}
+            >
+              <option value="member">Uživatel</option>
+              <option value="admin">Správce</option>
+            </Select>
+          </Field>
+        </div>
+
+        {member ? (
+          <div className="member-account-editor__state">
+            <div>
+              {accountActive ? (
+                <Badge tone="green">Účet aktivní</Badge>
+              ) : savedEmail ? (
+                <Badge tone="amber">Čeká na první přihlášení</Badge>
+              ) : (
+                <Badge tone="neutral">E-mail zatím není uložen</Badge>
+              )}
+              <AccountTimestamps member={member} />
+            </div>
+            {savedEmail && !accountActive ? (
+              <Button
+                disabled={emailChanged || loading}
+                loading={invitationLoading}
+                onClick={() => onInvite(member.id)}
+                type="button"
+                variant="secondary"
+              >
+                <Send aria-hidden="true" />
+                Poslat pozvánku
+              </Button>
+            ) : null}
+          </div>
+        ) : (
+          <p className="member-account-editor__hint">
+            Pozvánku bude možné poslat po prvním uložení člena.
+          </p>
+        )}
+        {emailChanged && savedEmail && !accountActive ? (
+          <p className="member-account-editor__hint">
+            Před odesláním pozvánky nejdřív uložte změnu e-mailu.
+          </p>
+        ) : null}
+        {invitationError ? (
+          <p className="form-error">{invitationError}</p>
+        ) : null}
+      </section>
+
+      {member ? (
+        <>
+          <MemberScoreSummary score={score} />
+          <MemberHistory
+            error={historyError}
+            history={history}
+            loading={historyLoading}
+          />
+        </>
+      ) : null}
       {error ? <p className="form-error">{error}</p> : null}
       <footer className="dialog-actions">
         <Button onClick={onCancel} type="button" variant="ghost">
@@ -433,4 +717,141 @@ function MemberForm({
       </footer>
     </form>
   );
+}
+
+function AccountTimestamps({ member }: { member: Member }) {
+  const account = member.account;
+  if (!account?.lastInvitationSentAt && !account?.lastSignInAt) return null;
+
+  return (
+    <span className="member-account-timestamps">
+      <Clock3 aria-hidden="true" />
+      <span>
+        {account.lastInvitationSentAt ? (
+          <small>
+            Poslední pozvánka{" "}
+            {formatAccountTimestamp(account.lastInvitationSentAt)}
+          </small>
+        ) : null}
+        {account.lastSignInAt ? (
+          <small>
+            Poslední přihlášení {formatAccountTimestamp(account.lastSignInAt)}
+          </small>
+        ) : null}
+      </span>
+    </span>
+  );
+}
+
+function MemberScoreSummary({ score }: { score?: ScoreRow }) {
+  return (
+    <section className="member-admin-score">
+      <header>
+        <span>
+          <strong>Souhrn bodů</strong>
+          <small>Body a účast podle uzavřených událostí.</small>
+        </span>
+      </header>
+      <dl>
+        <div className="member-admin-score__total">
+          <dt>Celkem</dt>
+          <dd>{formatPoints(score?.total ?? 0)} b.</dd>
+        </div>
+        <div>
+          <dt>Účast</dt>
+          <dd>{Math.round(score?.attendanceRate ?? 0)} %</dd>
+        </div>
+        <div>
+          <dt>Zkoušky</dt>
+          <dd>{formatPoints(score?.rehearsal ?? 0)} b.</dd>
+        </div>
+        <div>
+          <dt>Vystoupení</dt>
+          <dd>{formatPoints(score?.performance ?? 0)} b.</dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
+function MemberHistory({
+  history,
+  loading,
+  error,
+}: {
+  history?: MemberHistoryEntry[];
+  loading: boolean;
+  error?: string;
+}) {
+  const orderedHistory = [...(history ?? [])].sort((first, second) =>
+    second.date.localeCompare(first.date),
+  );
+
+  return (
+    <section className="member-admin-history">
+      <header>
+        <span>
+          <strong>Historie člena</strong>
+          <small>Účast, odpovědi, body a potvrzené taneční páry.</small>
+        </span>
+      </header>
+      {loading ? (
+        <p aria-live="polite" className="member-admin-history__empty">
+          Načítám historii…
+        </p>
+      ) : error ? (
+        <p className="form-error">
+          Historii se nepodařilo načíst. {error}
+        </p>
+      ) : orderedHistory.length ? (
+        <div className="member-admin-history__list">
+          {orderedHistory.map((entry) => (
+            <article key={entry.eventId}>
+              <div className="member-admin-history__title">
+                <span>
+                  <strong>{entry.title}</strong>
+                  <small>
+                    {formatDate(entry.date)} · {eventTypeLabels[entry.type]}
+                  </small>
+                </span>
+                <strong>{formatPoints(entry.points)} b.</strong>
+              </div>
+              <div className="member-admin-history__facts">
+                <span>Odpověď: {interestLabels[entry.response]}</span>
+                <span>Docházka: {attendanceLabels[entry.attendance]}</span>
+              </div>
+              {entry.pairs.length ? (
+                <ul>
+                  {entry.pairs.map((pair, index) => (
+                    <li
+                      key={`${entry.eventId}-${pair.partnerId}-${pair.blockName ?? index}`}
+                    >
+                      {pair.partnerName}
+                      {pair.blockName ? ` · ${pair.blockName}` : ""}
+                      {pair.programNames.length
+                        ? ` · ${pair.programNames.join(", ")}`
+                        : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="member-admin-history__empty">Zatím bez historie.</p>
+      )}
+    </section>
+  );
+}
+
+function normalizeEmail(value: string) {
+  return value.trim().toLocaleLowerCase("cs");
+}
+
+function formatAccountTimestamp(value: string) {
+  return new Intl.DateTimeFormat("cs-CZ", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }

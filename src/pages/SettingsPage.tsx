@@ -7,7 +7,9 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  ListMusic,
   LockKeyhole,
+  Plus,
   RefreshCcw,
   Save,
   Settings2,
@@ -15,18 +17,26 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  type ProgramCatalogItem,
+  type SessionUser,
+} from "../lib/domain";
 import { appApi } from "../lib/dataApi";
-import { type SessionUser } from "../lib/demoData";
 import { rotateSharedAccessCode } from "../lib/settingsApi";
-import { isSupabaseConfigured } from "../lib/supabase";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { databaseQueryKey, useDatabase } from "../components/DataContext";
 import { ErrorState, LoadingState } from "../components/DataStates";
 import { formatDate } from "../components/formatters";
 import { PageHeader } from "../components/PageHeader";
-import { Badge, Button, Card, Dialog, Field, Select, Toggle } from "../components/Ui";
+import { Badge, Button, Card, Field, Select, Toggle } from "../components/Ui";
 
-type SettingsSection = "season" | "scoring" | "pairing" | "access" | "data";
+type SettingsSection =
+  | "season"
+  | "scoring"
+  | "pairing"
+  | "programs"
+  | "access"
+  | "data";
 
 const sections: Array<{
   id: SettingsSection;
@@ -36,6 +46,7 @@ const sections: Array<{
   { id: "season", label: "Sezona a události", icon: Settings2 },
   { id: "scoring", label: "Bodování", icon: Calculator },
   { id: "pairing", label: "Pravidla párování", icon: Sparkles },
+  { id: "programs", label: "Katalog pásem", icon: ListMusic },
   { id: "access", label: "Přístup a role", icon: ShieldCheck },
   { id: "data", label: "Data a zálohy", icon: Database },
 ];
@@ -48,26 +59,11 @@ export function SettingsPage({
   canEdit: boolean;
 }) {
   const database = useDatabase();
-  const queryClient = useQueryClient();
-  const [section, setSection] = useState<SettingsSection>(
-    isSupabaseConfigured ? "access" : "season",
-  );
+  const [section, setSection] = useState<SettingsSection>("access");
   const [saved, setSaved] = useState("");
-  const [resetOpen, setResetOpen] = useState(false);
   const [codeVisible, setCodeVisible] = useState(false);
-  const [sharedCode, setSharedCode] = useState<string | null>(
-    isSupabaseConfigured ? null : "NSP-demo-2026",
-  );
+  const [sharedCode, setSharedCode] = useState<string | null>(null);
 
-  const resetMutation = useMutation({
-    mutationFn: appApi.reset,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: databaseQueryKey });
-      setResetOpen(false);
-      setSaved("Ukázková data byla obnovena");
-      window.setTimeout(() => setSaved(""), 2200);
-    },
-  });
   const rotateCodeMutation = useMutation({
     mutationFn: rotateSharedAccessCode,
     onSuccess: (newCode) => {
@@ -87,9 +83,10 @@ export function SettingsPage({
     setSaved("Nastavení je uložené");
     window.setTimeout(() => setSaved(""), 2200);
   };
-  const availableSections = isSupabaseConfigured
-    ? sections.filter((item) => item.id === "access" || item.id === "data")
-    : sections;
+  const availableSections = sections.filter(
+    (item) =>
+      item.id === "programs" || item.id === "access" || item.id === "data",
+  );
 
   return (
     <div className="page">
@@ -146,6 +143,13 @@ export function SettingsPage({
           {section === "pairing" ? (
             <PairingSettings canEdit={canEdit} onSave={confirmSaved} />
           ) : null}
+          {section === "programs" ? (
+            <ProgramCatalogSettings
+              canEdit={canEdit}
+              items={database.data.programCatalog ?? []}
+              onSaved={confirmSaved}
+            />
+          ) : null}
           {section === "access" ? (
             <AccessSettings
               canEdit={canEdit}
@@ -160,45 +164,13 @@ export function SettingsPage({
           ) : null}
           {section === "data" ? (
             <DataSettings
-              canEdit={canEdit}
               eventCount={database.data.events.length}
               memberCount={database.data.members.length}
-              onReset={() => setResetOpen(true)}
-              production={isSupabaseConfigured}
               updatedAt={database.data.updatedAt}
             />
           ) : null}
         </div>
       </div>
-
-      {!isSupabaseConfigured ? (
-        <Dialog
-          description="Všechny změny v tomto prohlížeči se zahodí a znovu se načtou výchozí smyšlená data."
-          onClose={() => setResetOpen(false)}
-          open={resetOpen}
-          size="small"
-          title="Obnovit testovací data?"
-        >
-          <div className="confirm-dialog">
-            <span className="confirm-dialog__icon">
-              <RefreshCcw aria-hidden="true" />
-            </span>
-            <p>Tato akce se týká pouze ukázkového režimu a nelze ji vrátit.</p>
-            <div className="dialog-actions">
-              <Button onClick={() => setResetOpen(false)} variant="ghost">
-                Zrušit
-              </Button>
-              <Button
-                loading={resetMutation.isPending}
-                onClick={() => resetMutation.mutate()}
-                variant="danger"
-              >
-                Obnovit data
-              </Button>
-            </div>
-          </div>
-        </Dialog>
-      ) : null}
     </div>
   );
 }
@@ -395,6 +367,135 @@ function PairingSettings({
   );
 }
 
+function ProgramCatalogSettings({
+  canEdit,
+  items,
+  onSaved,
+}: {
+  canEdit: boolean;
+  items: ProgramCatalogItem[];
+  onSaved: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [newName, setNewName] = useState("");
+  const mutation = useMutation({
+    mutationFn: appApi.saveProgramCatalogItem,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: databaseQueryKey });
+      setNewName("");
+      onSaved();
+    },
+  });
+
+  const saveItem = (item: ProgramCatalogItem, active = item.active) => {
+    const name = (drafts[item.id] ?? item.name).trim();
+    if (!name) return;
+    mutation.mutate({
+      id: item.id,
+      name,
+      active,
+      sortOrder: item.sortOrder,
+    });
+  };
+
+  const addItem = () => {
+    const name = newName.trim();
+    if (!name) return;
+    mutation.mutate({
+      name,
+      active: true,
+      sortOrder:
+        items.reduce((maximum, item) => Math.max(maximum, item.sortOrder), 0) +
+        10,
+    });
+  };
+
+  return (
+    <SettingsCard
+      description="Pásma se nabízejí při zakládání události. Jednorázový vlastní název zůstane pouze u dané události."
+      eyebrow="Program"
+      title="Katalog pásem"
+    >
+      <div className="program-catalog-list">
+        {items
+          .slice()
+          .sort(
+            (first, second) =>
+              first.sortOrder - second.sortOrder ||
+              first.name.localeCompare(second.name, "cs"),
+          )
+          .map((item) => (
+            <div className="program-catalog-row" key={item.id}>
+              <input
+                aria-label={`Název pásma ${item.name}`}
+                disabled={!canEdit || mutation.isPending}
+                onChange={(event) =>
+                  setDrafts((current) => ({
+                    ...current,
+                    [item.id]: event.target.value,
+                  }))
+                }
+                value={drafts[item.id] ?? item.name}
+              />
+              <Badge tone={item.active ? "green" : undefined}>
+                {item.active ? "Aktivní" : "Skryté"}
+              </Badge>
+              <Button
+                disabled={!canEdit || mutation.isPending}
+                onClick={() => saveItem(item)}
+                size="small"
+                variant="secondary"
+              >
+                <Save aria-hidden="true" />
+                Uložit
+              </Button>
+              <Button
+                disabled={!canEdit || mutation.isPending}
+                onClick={() => saveItem(item, !item.active)}
+                size="small"
+                variant="ghost"
+              >
+                <Archive aria-hidden="true" />
+                {item.active ? "Skrýt" : "Obnovit"}
+              </Button>
+            </div>
+          ))}
+      </div>
+      <div className="program-catalog-add">
+        <Field htmlFor="new-program-name" label="Nové pásmo">
+          <input
+            disabled={!canEdit || mutation.isPending}
+            id="new-program-name"
+            onChange={(event) => setNewName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                addItem();
+              }
+            }}
+            placeholder="Název pásma"
+            value={newName}
+          />
+        </Field>
+        <Button
+          disabled={!canEdit || !newName.trim()}
+          loading={mutation.isPending}
+          onClick={addItem}
+        >
+          <Plus aria-hidden="true" />
+          Přidat
+        </Button>
+      </div>
+      {mutation.isError ? (
+        <div className="form-message form-message--error" role="alert">
+          {mutation.error.message}
+        </div>
+      ) : null}
+    </SettingsCard>
+  );
+}
+
 function AccessSettings({
   session,
   canEdit,
@@ -426,7 +527,7 @@ function AccessSettings({
   return (
     <>
       <SettingsCard
-        description="Správci a zapisovatelé se přihlašují e-mailem."
+        description="Správci se přihlašují vlastním e-mailem. Členské účty se spravují v kartách členů."
         eyebrow="Oprávnění"
         title="Uživatelé aplikace"
       >
@@ -440,7 +541,7 @@ function AccessSettings({
           </span>
           <span>
             <strong>{session.displayName}</strong>
-            <small>{session.email || "Ukázkový účet bez e-mailu"}</small>
+            <small>{session.email || "E-mail není dostupný"}</small>
           </span>
           <Badge tone="green">Správce</Badge>
         </div>
@@ -508,16 +609,10 @@ function DataSettings({
   memberCount,
   eventCount,
   updatedAt,
-  canEdit,
-  onReset,
-  production,
 }: {
   memberCount: number;
   eventCount: number;
   updatedAt: string;
-  canEdit: boolean;
-  onReset: () => void;
-  production: boolean;
 }) {
   return (
     <>
@@ -542,9 +637,7 @@ function DataSettings({
           <div>
             <dt>Prostředí</dt>
             <dd>
-              <Badge tone={production ? "green" : "amber"}>
-                {production ? "Supabase" : "Místní ukázka"}
-              </Badge>
+              <Badge tone="green">Supabase</Badge>
             </dd>
           </div>
         </dl>
@@ -553,29 +646,12 @@ function DataSettings({
             <Archive aria-hidden="true" />
             <span>
               <strong>Pravidelný export</strong>
-              <small>
-                {production
-                  ? "Schéma je verzované v repozitáři; data jsou uložená v Supabase."
-                  : "Po připojení Supabase budou data uložená centrálně."}
-              </small>
+              <small>Schéma je verzované v repozitáři; data jsou uložená v Supabase.</small>
             </span>
           </span>
           <Badge tone="blue">Připraveno</Badge>
         </div>
       </SettingsCard>
-      {!production ? (
-        <Card className="danger-zone">
-          <div>
-            <span className="eyebrow">Ukázkový režim</span>
-            <h2>Obnovit testovací data</h2>
-            <p>Vrátí docházku, členy i páry do původního smyšleného stavu.</p>
-          </div>
-          <Button disabled={!canEdit} onClick={onReset} variant="danger">
-            <RefreshCcw aria-hidden="true" />
-            Obnovit data
-          </Button>
-        </Card>
-      ) : null}
     </>
   );
 }

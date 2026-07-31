@@ -5,12 +5,13 @@ import { BrandMark } from "./components/BrandMark";
 import { AppLink, matchRoute, navigate, useRoute } from "./components/Router";
 import {
   getCurrentAppSession,
-  sendMagicLink,
+  requestEmailLogin,
   signInWithSharedCode,
   signOut,
   subscribeToAuth,
+  verifyEmailOtp,
 } from "./lib/auth";
-import type { SessionUser } from "./lib/demoData";
+import type { SessionUser } from "./lib/domain";
 import { isSupabaseConfigured } from "./lib/supabase";
 import { DashboardPage } from "./pages/DashboardPage";
 import { EventDetailPage } from "./pages/EventDetailPage";
@@ -21,22 +22,9 @@ import { PairingPage } from "./pages/PairingPage";
 import { ScoresPage } from "./pages/ScoresPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
-const SESSION_KEY = "nsp-akce-session";
-
-function readSession(): SessionUser | null {
-  try {
-    const stored = window.sessionStorage.getItem(SESSION_KEY);
-    return stored ? (JSON.parse(stored) as SessionUser) : null;
-  } catch {
-    return null;
-  }
-}
-
 export default function App() {
   const route = useRoute();
-  const [session, setSession] = useState<SessionUser | null>(
-    isSupabaseConfigured ? null : readSession,
-  );
+  const [session, setSession] = useState<SessionUser | null>(null);
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
   const [authError, setAuthError] = useState("");
 
@@ -87,57 +75,43 @@ export default function App() {
     );
   }
 
+  if (!isSupabaseConfigured) {
+    return (
+      <main className="configuration-error" role="alert">
+        <BrandMark />
+        <h1>Aplikace není připojená k databázi</h1>
+        <p>
+          Doplňte veřejnou adresu a publishable key projektu Supabase do
+          lokálního prostředí a stránku znovu načtěte.
+        </p>
+      </main>
+    );
+  }
+
   if (!session) {
     return (
       <LoginPage
-        onDemoLogin={
-          isSupabaseConfigured
-            ? undefined
-            : () => {
-                const nextSession: SessionUser = {
-                  displayName: "Ukázkový správce",
-                  role: "admin",
-                };
-                window.sessionStorage.setItem(
-                  SESSION_KEY,
-                  JSON.stringify(nextSession),
-                );
-                setSession(nextSession);
-                navigate("/");
-              }
-        }
         onEmailLogin={async (email) => {
-          if (!isSupabaseConfigured) {
-            throw new Error(
-              "E-mailové přihlášení funguje až po připojení Supabase.",
-            );
-          }
           setAuthError("");
-          await sendMagicLink(email);
+          await requestEmailLogin(email);
+        }}
+        onEmailOtpLogin={async (email, token) => {
+          setAuthError("");
+          const nextSession = await verifyEmailOtp(email, token);
+          setSession(nextSession);
+          navigate("/");
         }}
         onSharedCodeLogin={async (code) => {
           setAuthError("");
-          if (isSupabaseConfigured) {
-            const nextSession = await signInWithSharedCode(code);
-            setSession(nextSession);
-          } else {
-            const nextSession: SessionUser = {
-              displayName: "Členský přehled",
-              role: "member",
-            };
-            window.sessionStorage.setItem(
-              SESSION_KEY,
-              JSON.stringify(nextSession),
-            );
-            setSession(nextSession);
-          }
+          const nextSession = await signInWithSharedCode(code);
+          setSession(nextSession);
           navigate("/");
         }}
       />
     );
   }
 
-  const canRecord = session.role === "admin" || session.role === "recorder";
+  const canRecord = session.role === "admin";
   const canAdmin = session.role === "admin";
   const eventRoute = matchRoute(route, "/udalosti/:id");
 
@@ -173,8 +147,7 @@ export default function App() {
       onSignOut={() => {
         void (async () => {
           setAuthError("");
-          if (isSupabaseConfigured) await signOut();
-          window.sessionStorage.removeItem(SESSION_KEY);
+          await signOut();
           setSession(null);
           navigate("/");
         })().catch((error: unknown) => {

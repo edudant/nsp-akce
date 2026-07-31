@@ -1,54 +1,132 @@
 import {
+  ArrowLeft,
   ArrowRight,
   CalendarCheck,
   CheckCircle2,
   KeyRound,
   Mail,
-  ShieldCheck,
+  RefreshCw,
   Sparkles,
+  Trophy,
 } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { BrandMark } from "../components/BrandMark";
 import { Button, Field } from "../components/Ui";
+import {
+  EMAIL_RESEND_SECONDS,
+  getEmailAuthErrorMessage,
+} from "../lib/auth";
+
+export interface LoginPageProps {
+  onEmailLogin: (email: string) => Promise<void>;
+  onEmailOtpLogin: (email: string, token: string) => Promise<void>;
+  onSharedCodeLogin: (code: string) => Promise<void>;
+}
 
 export function LoginPage({
   onEmailLogin,
+  onEmailOtpLogin,
   onSharedCodeLogin,
-  onDemoLogin,
-}: {
-  onEmailLogin: (email: string) => Promise<void>;
-  onSharedCodeLogin: (code: string) => Promise<void>;
-  onDemoLogin?: () => void;
-}) {
-  const [mode, setMode] = useState<"email" | "code">("email");
+}: LoginPageProps) {
+  const [mode, setMode] = useState<"email" | "shared">("email");
+  const [emailStep, setEmailStep] = useState<"request" | "verify">(
+    "request",
+  );
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
+  const [sentEmail, setSentEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [sharedCode, setSharedCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [resendAvailableAt, setResendAvailableAt] = useState<number | null>(
+    null,
+  );
+  const [resendRemaining, setResendRemaining] = useState(0);
+
+  useEffect(() => {
+    if (resendAvailableAt === null) return;
+
+    const updateRemaining = () => {
+      const remaining = Math.max(
+        0,
+        Math.ceil((resendAvailableAt - Date.now()) / 1000),
+      );
+      setResendRemaining(remaining);
+      if (remaining === 0) setResendAvailableAt(null);
+    };
+
+    updateRemaining();
+    const interval = window.setInterval(updateRemaining, 250);
+    return () => window.clearInterval(interval);
+  }, [resendAvailableAt]);
+
+  const startResendCooldown = () => {
+    setResendRemaining(EMAIL_RESEND_SECONDS);
+    setResendAvailableAt(Date.now() + EMAIL_RESEND_SECONDS * 1000);
+  };
+
+  const requestLoginEmail = async (address: string, resend = false) => {
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      await onEmailLogin(address);
+      setSentEmail(address);
+      setEmailStep("verify");
+      setOtp("");
+      startResendCooldown();
+      setMessage(
+        resend
+          ? "Poslali jsme nový přihlašovací e-mail. Platí vždy jen nejnovější kód."
+          : "Pokud je adresa evidovaná, poslali jsme na ni odkaz i šestimístný kód.",
+      );
+    } catch (caughtError) {
+      setError(getEmailAuthErrorMessage(caughtError, "request"));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
     setMessage("");
-    if (mode === "email" && !email.includes("@")) {
-      setError("Zadejte platnou e-mailovou adresu.");
+
+    if (mode === "email") {
+      if (emailStep === "request") {
+        const normalizedEmail = email.trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+          setError("Zadejte platnou e-mailovou adresu.");
+          return;
+        }
+        await requestLoginEmail(normalizedEmail);
+        return;
+      }
+
+      const normalizedOtp = otp.replace(/\D/g, "");
+      if (normalizedOtp.length !== 6) {
+        setError("Zadejte všech šest číslic z e-mailu.");
+        return;
+      }
+      setLoading(true);
+      try {
+        await onEmailOtpLogin(sentEmail, normalizedOtp);
+      } catch (caughtError) {
+        setError(getEmailAuthErrorMessage(caughtError, "verify"));
+      } finally {
+        setLoading(false);
+      }
       return;
     }
-    if (mode === "code" && code.trim().length < 4) {
+
+    if (sharedCode.trim().length < 4) {
       setError("Přístupový kód má alespoň 4 znaky.");
       return;
     }
     setLoading(true);
     try {
-      if (mode === "email") {
-        await onEmailLogin(email.trim());
-        setMessage(
-          "Přihlašovací odkaz jsme poslali do e-mailu. Můžete zavřít tuto stránku a otevřít odkaz.",
-        );
-      } else {
-        await onSharedCodeLogin(code.trim());
-      }
+      await onSharedCodeLogin(sharedCode.trim());
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -58,6 +136,19 @@ export function LoginPage({
     } finally {
       setLoading(false);
     }
+  };
+
+  const changeMode = (nextMode: "email" | "shared") => {
+    setMode(nextMode);
+    setError("");
+    setMessage("");
+  };
+
+  const changeEmail = () => {
+    setEmailStep("request");
+    setOtp("");
+    setMessage("");
+    setError("");
   };
 
   return (
@@ -73,11 +164,12 @@ export function LoginPage({
           </div>
 
           <div className="login-story__headline">
-            <span className="eyebrow eyebrow--light">Tradice, která nás spojuje</span>
-            <h1>Mějte zkoušky, body i páry na jednom místě.</h1>
+            <span className="eyebrow eyebrow--light">Co je nového v souboru</span>
+            <h1>Akce, účast i taneční páry pěkně pohromadě.</h1>
             <p>
-              Jednoduchý přehled pro vedení souboru i členy. Dostupný z mobilu
-              přímo během zkoušky.
+              Mrkněte, co se chystá a kdo kde bude. Aplikace pomůže poskládat
+              páry na jednotlivé akce a za každou účast přihodí body. Kdo jich
+              má na konci nejvíc, odnese si odměnu ;)
             </p>
           </div>
 
@@ -85,22 +177,22 @@ export function LoginPage({
             <li>
               <CalendarCheck aria-hidden="true" />
               <span>
-                <strong>Docházka během chvilky</strong>
-                Jedno klepnutí pro každého člena.
+                <strong>Všechny akce po ruce</strong>
+                Zkoušky, vystoupení i přehled, kdo dorazí.
               </span>
             </li>
             <li>
               <Sparkles aria-hidden="true" />
               <span>
-                <strong>Spravedlivé střídání párů</strong>
-                Návrh zohlední zkušenost i historii.
+                <strong>Páry bez věčného opakování</strong>
+                Pomůže tanečníky střídat férově a s rozumem.
               </span>
             </li>
             <li>
-              <ShieldCheck aria-hidden="true" />
+              <Trophy aria-hidden="true" />
               <span>
-                <strong>Citlivé údaje zůstávají uvnitř</strong>
-                Každý vidí jen to, co potřebuje.
+                <strong>Body za každou účast</strong>
+                Chodíte, sbíráte body a hrajete o odměnu ;)
               </span>
             </li>
           </ul>
@@ -110,25 +202,22 @@ export function LoginPage({
 
       <section className="login-panel">
         <div className="mobile-login-hero" aria-hidden="true">
-          <span>Tradice, která nás spojuje</span>
+          <span>Akce, účast a páry</span>
           <strong>Národopisný soubor Postřekov</strong>
         </div>
         <div className="login-card">
           <div className="login-card__heading">
             <BrandMark className="mobile-login-logo" />
-            <span className="eyebrow">Vítejte zpět</span>
+            <span className="eyebrow">Tak jdeme na to</span>
             <h2>Přihlášení do aplikace</h2>
-            <p>Zvolte způsob přístupu podle své role.</p>
+            <p>Přihlaste se e-mailem nebo společným kódem souboru.</p>
           </div>
 
           <div className="auth-tabs" role="tablist" aria-label="Způsob přihlášení">
             <button
               aria-selected={mode === "email"}
               className={mode === "email" ? "is-active" : ""}
-              onClick={() => {
-                setMode("email");
-                setError("");
-              }}
+              onClick={() => changeMode("email")}
               role="tab"
               type="button"
             >
@@ -136,12 +225,9 @@ export function LoginPage({
               E-mail
             </button>
             <button
-              aria-selected={mode === "code"}
-              className={mode === "code" ? "is-active" : ""}
-              onClick={() => {
-                setMode("code");
-                setError("");
-              }}
+              aria-selected={mode === "shared"}
+              className={mode === "shared" ? "is-active" : ""}
+              onClick={() => changeMode("shared")}
               role="tab"
               type="button"
             >
@@ -157,11 +243,11 @@ export function LoginPage({
                 {message}
               </div>
             ) : null}
-            {mode === "email" ? (
+            {mode === "email" && emailStep === "request" ? (
               <>
                 <Field
                   error={error}
-                  hint="Pro správce a zapisovatele."
+                  hint="Pro členy, kteří mají u svého profilu evidovaný e-mail."
                   htmlFor="login-email"
                   label="E-mailová adresa"
                 >
@@ -178,13 +264,75 @@ export function LoginPage({
                   </div>
                 </Field>
                 <Button loading={loading} size="large" type="submit">
-                  Poslat přihlašovací odkaz
+                  Poslat odkaz a kód
                   <ArrowRight aria-hidden="true" />
                 </Button>
                 <p className="auth-help">
-                  Odkaz přijde do e-mailu a má omezenou platnost.
+                  Zpráva obsahuje magic link i šestimístný kód. Můžete použít
+                  jednodušší variantu.
                 </p>
               </>
+            ) : mode === "email" ? (
+              <div className="email-login-step">
+                <div className="email-login-step__address">
+                  <span>Kód jsme poslali na</span>
+                  <strong>{sentEmail}</strong>
+                </div>
+                <Field
+                  error={error}
+                  hint="Kód má šest číslic a omezenou platnost."
+                  htmlFor="login-otp"
+                  label="Kód z e-mailu"
+                >
+                  <div className="input-with-icon otp-input">
+                    <KeyRound aria-hidden="true" />
+                    <input
+                      autoComplete="one-time-code"
+                      autoFocus
+                      id="login-otp"
+                      inputMode="numeric"
+                      maxLength={6}
+                      onChange={(event) =>
+                        setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
+                      }
+                      pattern="[0-9]{6}"
+                      placeholder="000000"
+                      type="text"
+                      value={otp}
+                    />
+                  </div>
+                </Field>
+                <Button loading={loading} size="large" type="submit">
+                  Ověřit a přihlásit
+                  <ArrowRight aria-hidden="true" />
+                </Button>
+                <p className="auth-help">
+                  Můžete také otevřít tlačítko v e-mailu. Když se odkaz otevře
+                  v okně pošty, vraťte se sem a opište kód.
+                </p>
+                <div className="email-login-actions">
+                  <Button
+                    disabled={loading || resendRemaining > 0}
+                    onClick={() => void requestLoginEmail(sentEmail, true)}
+                    size="small"
+                    type="button"
+                    variant="secondary"
+                  >
+                    <RefreshCw aria-hidden="true" />
+                    {resendRemaining > 0
+                      ? `Poslat znovu za ${resendRemaining} s`
+                      : "Poslat nový kód"}
+                  </Button>
+                  <button
+                    className="email-change-button"
+                    onClick={changeEmail}
+                    type="button"
+                  >
+                    <ArrowLeft aria-hidden="true" />
+                    Změnit e-mail
+                  </button>
+                </div>
+              </div>
             ) : (
               <>
                 <Field
@@ -196,12 +344,12 @@ export function LoginPage({
                   <div className="input-with-icon">
                     <KeyRound aria-hidden="true" />
                     <input
-                      autoComplete="one-time-code"
+                      autoComplete="off"
                       id="login-code"
-                      onChange={(event) => setCode(event.target.value)}
+                      onChange={(event) => setSharedCode(event.target.value)}
                       placeholder="••••••••"
                       type="password"
-                      value={code}
+                      value={sharedCode}
                     />
                   </div>
                 </Field>
@@ -215,22 +363,6 @@ export function LoginPage({
               </>
             )}
           </form>
-
-          {onDemoLogin ? (
-            <div className="demo-access">
-              <span>
-                <CheckCircle2 aria-hidden="true" />
-                Lokální ukázkový režim
-              </span>
-              <Button
-                onClick={onDemoLogin}
-                size="small"
-                variant="secondary"
-              >
-                Vstoupit do ukázky
-              </Button>
-            </div>
-          ) : null}
         </div>
         <p className="login-footer">
           © 2026 Národopisný soubor Postřekov · Interní aplikace

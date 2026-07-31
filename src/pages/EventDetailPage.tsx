@@ -1,14 +1,20 @@
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
   CalendarDays,
   Check,
   CheckCircle2,
   Clock3,
+  HeartHandshake,
   Info,
   MapPin,
   MessageCircleQuestion,
   Minus,
+  Plus,
+  Save,
   Sparkles,
+  Trash2,
   UserCheck,
   UserMinus,
   UsersRound,
@@ -19,15 +25,32 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { appApi } from "../lib/dataApi";
 import {
   attendanceLabels,
+  experienceLabels,
   getAttendancePoints,
   interestLabels,
   type AttendanceRecord,
   type AttendanceStatus,
+  type EnsembleEvent,
+  type EventProgramItem,
+  type EventProgramUpdateItem,
   type InterestStatus,
-} from "../lib/demoData";
+  type Member,
+  type PairingBlock,
+  type ProgramCatalogItem,
+} from "../lib/domain";
+import {
+  canRespondToEvent,
+  displayedAttendancePoints,
+  groupEventPairs,
+} from "../lib/memberPortal";
 import { databaseQueryKey, useDatabase } from "../components/DataContext";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataStates";
-import { formatDate, formatPoints, formatWeekday } from "../components/formatters";
+import {
+  formatDate,
+  formatPoints,
+  formatWeekday,
+  todayInPrague,
+} from "../components/formatters";
 import { AppLink } from "../components/Router";
 import {
   AttendanceBadge,
@@ -37,6 +60,7 @@ import {
   Card,
   EventStatusBadge,
   EventTypeBadge,
+  IconButton,
   Select,
 } from "../components/Ui";
 
@@ -145,6 +169,42 @@ export function EventDetailPage({
       window.setTimeout(() => setSavedMessage(""), 1800);
     },
   });
+  const myResponseMutation = useMutation({
+    mutationFn: (response: InterestStatus) =>
+      appApi.updateMyResponse(eventId, response),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: databaseQueryKey }),
+        queryClient.invalidateQueries({ queryKey: eventQueryKey }),
+      ]);
+      setSavedMessage("Vaše odpověď je uložená");
+      window.setTimeout(() => setSavedMessage(""), 1800);
+    },
+  });
+  const wishesMutation = useMutation({
+    mutationFn: (partnerIds: string[]) =>
+      appApi.setMyPartnerWishes(eventId, partnerIds),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: databaseQueryKey }),
+        queryClient.invalidateQueries({ queryKey: eventQueryKey }),
+      ]);
+      setSavedMessage("Přání partnerů je uložené");
+      window.setTimeout(() => setSavedMessage(""), 1800);
+    },
+  });
+  const programMutation = useMutation({
+    mutationFn: (items: EventProgramUpdateItem[]) =>
+      appApi.updateEventProgram(eventId, items),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: databaseQueryKey }),
+        queryClient.invalidateQueries({ queryKey: eventQueryKey }),
+      ]);
+      setSavedMessage("Program události je uložený");
+      window.setTimeout(() => setSavedMessage(""), 1800);
+    },
+  });
 
   const event = eventQuery.data;
   const members = useMemo(
@@ -217,6 +277,22 @@ export function EventDetailPage({
   const responseCount = event.attendance.filter(
     (record) => record.interest !== "unset",
   ).length;
+  const personalMember = database.data.accessMode === "member";
+  const myMember = database.data.members.find(
+    (member) => member.id === database.data.myMemberId,
+  );
+  const myRecord = event.attendance.find(
+    (record) => record.memberId === database.data.myMemberId,
+  );
+  const myWishIds = (database.data.partnerWishes ?? [])
+    .filter(
+      (wish) =>
+        wish.eventId === event.id && wish.memberId === database.data.myMemberId,
+    )
+    .map((wish) => wish.partnerId);
+  const attendanceScope = event.attendanceScope ?? "all";
+  const eventDetailsAvailable = event.eventDetailsAvailable !== false;
+  const pairGroups = groupEventPairs(event);
 
   return (
     <div className="page page--detail">
@@ -286,46 +362,54 @@ export function EventDetailPage({
       </header>
 
       <section className="event-summary-grid">
-        <Card className="event-summary-item">
-          <span className="summary-icon summary-icon--green">
-            <UserCheck aria-hidden="true" />
-          </span>
-          <span>
-            <small>
-              {event.status === "closed" ? "Přítomno" : "Má zájem"}
-            </small>
-            <strong>{event.status === "closed" ? present : interested}</strong>
-            <em>z {event.attendance.length} aktivních</em>
-          </span>
-        </Card>
-        <Card className="event-summary-item">
-          <span className="summary-icon summary-icon--blue">
-            <CheckCircle2 aria-hidden="true" />
-          </span>
-          <span>
-            <small>
-              {event.status === "closed" ? "Docházka zapsána" : "Odpovědělo"}
-            </small>
-            <strong>
-              {event.status === "closed" ? recorded : responseCount}
-            </strong>
-            <em>
-              {event.attendance.length -
-                (event.status === "closed" ? recorded : responseCount)}{" "}
-              zbývá
-            </em>
-          </span>
-        </Card>
-        <Card className="event-summary-item">
-          <span className="summary-icon summary-icon--amber">
-            <UsersRound aria-hidden="true" />
-          </span>
-          <span>
-            <small>Plánovaná kapacita</small>
-            <strong>{event.capacityPairs}</strong>
-            <em>tanečních párů</em>
-          </span>
-        </Card>
+        {attendanceScope === "all" ? (
+          <>
+            <Card className="event-summary-item">
+              <span className="summary-icon summary-icon--green">
+                <UserCheck aria-hidden="true" />
+              </span>
+              <span>
+                <small>
+                  {event.status === "closed" ? "Přítomno" : "Má zájem"}
+                </small>
+                <strong>{event.status === "closed" ? present : interested}</strong>
+                <em>z {event.attendance.length} aktivních</em>
+              </span>
+            </Card>
+            <Card className="event-summary-item">
+              <span className="summary-icon summary-icon--blue">
+                <CheckCircle2 aria-hidden="true" />
+              </span>
+              <span>
+                <small>
+                  {event.status === "closed"
+                    ? "Docházka zapsána"
+                    : "Odpovědělo"}
+                </small>
+                <strong>
+                  {event.status === "closed" ? recorded : responseCount}
+                </strong>
+                <em>
+                  {event.attendance.length -
+                    (event.status === "closed" ? recorded : responseCount)}{" "}
+                  zbývá
+                </em>
+              </span>
+            </Card>
+          </>
+        ) : null}
+        {eventDetailsAvailable ? (
+          <Card className="event-summary-item">
+            <span className="summary-icon summary-icon--amber">
+              <UsersRound aria-hidden="true" />
+            </span>
+            <span>
+              <small>Plánovaná kapacita</small>
+              <strong>{event.capacityPairs}</strong>
+              <em>tanečních párů</em>
+            </span>
+          </Card>
+        ) : null}
         <Card className="event-summary-item">
           <span className="summary-icon summary-icon--red">
             <Sparkles aria-hidden="true" />
@@ -372,7 +456,27 @@ export function EventDetailPage({
         </button>
       </nav>
 
-      {tab === "attendance" ? (
+      {tab === "attendance" && personalMember && myMember && myRecord ? (
+        <MemberParticipationPanel
+          canRespond={
+            canRespondToEvent(event, todayInPrague())
+          }
+          error={
+            myResponseMutation.error?.message ?? wishesMutation.error?.message
+          }
+          event={event}
+          key={`${event.id}:${myWishIds.join(",")}`}
+          loading={myResponseMutation.isPending || wishesMutation.isPending}
+          member={myMember}
+          members={members}
+          onResponse={(response) => myResponseMutation.mutate(response)}
+          onSaveWishes={(partnerIds) => wishesMutation.mutate(partnerIds)}
+          record={myRecord}
+          wishIds={myWishIds}
+        />
+      ) : null}
+
+      {tab === "attendance" && !personalMember && attendanceScope === "all" ? (
         <Card className="roster-card">
           <header className="roster-card__header">
             <div>
@@ -560,6 +664,19 @@ export function EventDetailPage({
         </Card>
       ) : null}
 
+      {tab === "attendance" && attendanceScope === "none" ? (
+        <Card className="shared-attendance-note">
+          <UsersRound aria-hidden="true" />
+          <span>
+            <strong>Osobní odpovědi tu nezobrazujeme</strong>
+            <p>
+              Společný přístup ukazuje termíny, body a zveřejněné páry. Svoji
+              účast mohou členové potvrdit po přihlášení e-mailem.
+            </p>
+          </span>
+        </Card>
+      ) : null}
+
       {tab === "pairs" ? (
         <Card className="event-pairs-card">
           <div className="card-heading">
@@ -604,28 +721,51 @@ export function EventDetailPage({
             </p>
           ) : null}
           {event.pairs.length ? (
-            <div className="saved-pairs">
-              {event.pairs.map((pair, index) => {
-                const leader = members.find((member) => member.id === pair.leaderId);
-                const follower = members.find(
-                  (member) => member.id === pair.followerId,
-                );
-                if (!leader || !follower) return null;
-                return (
-                  <div key={pair.id}>
-                    <span>{index + 1}</span>
-                    <Avatar member={leader} size="small" />
-                    <strong>{leader.fullName}</strong>
-                    <span className="pair-divider">+</span>
-                    <Avatar member={follower} size="small" />
-                    <strong>{follower.fullName}</strong>
-                    {pair.locked ? <Badge tone="amber">Pevný pár</Badge> : null}
-                    {pair.actual ? (
-                      <Badge tone="green">Skutečně tančili</Badge>
-                    ) : null}
+            <div className="event-pair-groups">
+              {pairGroups.map((group) => (
+                <section className="event-pair-group" key={group.key}>
+                  <header>
+                    <span>
+                      <strong>{group.name}</strong>
+                      <small>
+                        {group.programNames.length
+                          ? group.programNames.join(" · ")
+                          : "Celá událost"}
+                      </small>
+                    </span>
+                    <Badge tone="green">
+                      {group.pairs.length} {group.pairs.length === 1 ? "pár" : "párů"}
+                    </Badge>
+                  </header>
+                  <div className="saved-pairs">
+                    {group.pairs.map((pair, index) => {
+                      const leader = members.find(
+                        (member) => member.id === pair.leaderId,
+                      );
+                      const follower = members.find(
+                        (member) => member.id === pair.followerId,
+                      );
+                      if (!leader || !follower) return null;
+                      return (
+                        <div key={pair.id}>
+                          <span>{index + 1}</span>
+                          <Avatar member={leader} size="small" />
+                          <strong>{leader.fullName}</strong>
+                          <span className="pair-divider">+</span>
+                          <Avatar member={follower} size="small" />
+                          <strong>{follower.fullName}</strong>
+                          {pair.locked ? (
+                            <Badge tone="amber">Pevný pár</Badge>
+                          ) : null}
+                          {pair.actual ? (
+                            <Badge tone="green">Skutečně tančili</Badge>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
+                </section>
+              ))}
             </div>
           ) : (
             <EmptyState
@@ -662,14 +802,18 @@ export function EventDetailPage({
                 <dt>Program</dt>
                 <dd>{event.program || "Neuveden"}</dd>
               </div>
-              <div>
-                <dt>Bodová váha</dt>
-                <dd>{formatPoints(event.weight)} bodu</dd>
-              </div>
-              <div>
-                <dt>Počet párů</dt>
-                <dd>{event.capacityPairs}</dd>
-              </div>
+              {eventDetailsAvailable ? (
+                <>
+                  <div>
+                    <dt>Bodová váha</dt>
+                    <dd>{formatPoints(event.weight)} bodu</dd>
+                  </div>
+                  <div>
+                    <dt>Počet párů</dt>
+                    <dd>{event.capacityPairs}</dd>
+                  </div>
+                </>
+              ) : null}
             </dl>
           </Card>
           <Card>
@@ -692,8 +836,530 @@ export function EventDetailPage({
               </div>
             ) : null}
           </Card>
+          {canAdmin ? (
+            <EventProgramEditor
+              catalog={database.data.programCatalog ?? []}
+              error={programMutation.error?.message}
+              eventBlocks={event.pairingBlocks ?? []}
+              items={event.programItems ?? []}
+              key={`${event.id}:${(event.programItems ?? [])
+                .map((item) => `${item.id}:${item.sortOrder}`)
+                .join("|")}`}
+              loading={programMutation.isPending}
+              onSave={(items) => programMutation.mutate(items)}
+              pairsPublished={event.pairsPublished}
+              success={
+                savedMessage === "Program události je uložený"
+                  ? savedMessage
+                  : undefined
+              }
+            />
+          ) : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+interface EditableEventProgramItem {
+  key: string;
+  persistedId?: string;
+  name: string;
+  catalogId?: string;
+  custom: boolean;
+}
+
+function toEditableProgramItem(
+  item: EventProgramItem,
+): EditableEventProgramItem {
+  return {
+    key: item.id,
+    persistedId: item.id,
+    name: item.name,
+    catalogId: item.catalogId,
+    custom: item.custom,
+  };
+}
+
+function toProgramUpdateItem(
+  item: EditableEventProgramItem,
+): EventProgramUpdateItem {
+  return item.catalogId
+    ? { id: item.persistedId, catalogId: item.catalogId }
+    : { id: item.persistedId, customName: item.name };
+}
+
+function programUpdateSignature(items: EventProgramUpdateItem[]) {
+  return JSON.stringify(
+    items.map((item) => ({
+      id: item.id ?? null,
+      catalogId: item.catalogId ?? null,
+      customName: item.customName?.trim() ?? null,
+    })),
+  );
+}
+
+function EventProgramEditor({
+  items,
+  catalog,
+  eventBlocks,
+  pairsPublished,
+  loading,
+  error,
+  success,
+  onSave,
+}: {
+  items: EventProgramItem[];
+  catalog: ProgramCatalogItem[];
+  eventBlocks: PairingBlock[];
+  pairsPublished: boolean;
+  loading: boolean;
+  error?: string;
+  success?: string;
+  onSave: (items: EventProgramUpdateItem[]) => void;
+}) {
+  const originalItems = [...items].sort(
+    (first, second) => first.sortOrder - second.sortOrder,
+  );
+  const [draftItems, setDraftItems] = useState<EditableEventProgramItem[]>(() =>
+    originalItems.map(toEditableProgramItem),
+  );
+  const [catalogChoice, setCatalogChoice] = useState("");
+  const [customName, setCustomName] = useState("");
+  const [validationError, setValidationError] = useState("");
+
+  const selectedCatalogIds = new Set(
+    draftItems.flatMap((item) => (item.catalogId ? [item.catalogId] : [])),
+  );
+  const availableCatalog = catalog
+    .filter((item) => item.active && !selectedCatalogIds.has(item.id))
+    .sort(
+      (first, second) =>
+        first.sortOrder - second.sortOrder ||
+        first.name.localeCompare(second.name, "cs"),
+    );
+  const originalSignature = programUpdateSignature(
+    originalItems.map(toEditableProgramItem).map(toProgramUpdateItem),
+  );
+  const updateItems = draftItems.map(toProgramUpdateItem);
+  const dirty = programUpdateSignature(updateItems) !== originalSignature;
+
+  const isProtectedByPublishedBlock = (item: EditableEventProgramItem) =>
+    Boolean(
+      pairsPublished &&
+        item.persistedId &&
+        eventBlocks.some(
+          (block) =>
+            block.appliesToAll ||
+            block.programItemIds.includes(item.persistedId as string),
+        ),
+    );
+
+  const addCatalogItem = () => {
+    const catalogItem = catalog.find((item) => item.id === catalogChoice);
+    if (!catalogItem || selectedCatalogIds.has(catalogItem.id)) return;
+    const original = originalItems.find(
+      (item) => item.catalogId === catalogItem.id,
+    );
+    setDraftItems((current) => [
+      ...current,
+      original
+        ? toEditableProgramItem(original)
+        : {
+            key: `catalog-${catalogItem.id}`,
+            name: catalogItem.name,
+            catalogId: catalogItem.id,
+            custom: false,
+          },
+    ]);
+    setCatalogChoice("");
+    setValidationError("");
+  };
+
+  const addCustomItem = () => {
+    const name = customName.trim();
+    if (!name) {
+      setValidationError("Zadejte název vlastního pásma.");
+      return;
+    }
+    if (name.length > 120) {
+      setValidationError("Název vlastního pásma může mít nejvýše 120 znaků.");
+      return;
+    }
+    if (
+      draftItems.some(
+        (item) => item.name.trim().toLocaleLowerCase("cs") === name.toLocaleLowerCase("cs"),
+      )
+    ) {
+      setValidationError("Pásmo s tímto názvem už je v programu.");
+      return;
+    }
+    const original = originalItems.find(
+      (item) =>
+        item.custom &&
+        item.name.trim().toLocaleLowerCase("cs") === name.toLocaleLowerCase("cs"),
+    );
+    setDraftItems((current) => [
+      ...current,
+      original
+        ? toEditableProgramItem(original)
+        : {
+            key: `custom-${name.toLocaleLowerCase("cs")}`,
+            name,
+            custom: true,
+          },
+    ]);
+    setCustomName("");
+    setValidationError("");
+  };
+
+  const moveItem = (index: number, offset: -1 | 1) => {
+    const nextIndex = index + offset;
+    if (nextIndex < 0 || nextIndex >= draftItems.length) return;
+    setDraftItems((current) => {
+      const next = [...current];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return next;
+    });
+    setValidationError("");
+  };
+
+  const removeItem = (item: EditableEventProgramItem) => {
+    if (isProtectedByPublishedBlock(item)) return;
+    setDraftItems((current) =>
+      current.filter((candidate) => candidate.key !== item.key),
+    );
+    setValidationError("");
+  };
+
+  return (
+    <Card className="event-program-editor">
+      <div className="card-heading event-program-editor__heading">
+        <div>
+          <span className="eyebrow">Program události</span>
+          <h2>Pásma a jejich pořadí</h2>
+          <p>
+            Vyberte pásma z katalogu nebo přidejte název jen pro tuto událost.
+          </p>
+        </div>
+        <div className="event-program-editor__actions">
+          {success ? (
+            <span aria-live="polite" className="save-indicator">
+              <CheckCircle2 aria-hidden="true" />
+              {success}
+            </span>
+          ) : null}
+          <Button
+            disabled={!dirty}
+            loading={loading}
+            onClick={() => onSave(updateItems)}
+            size="small"
+          >
+            <Save aria-hidden="true" />
+            Uložit program
+          </Button>
+        </div>
+      </div>
+
+      {draftItems.length ? (
+        <ol className="event-program-editor__list">
+          {draftItems.map((item, index) => {
+            const protectedItem = isProtectedByPublishedBlock(item);
+            return (
+              <li className="event-program-editor__row" key={item.key}>
+                <span className="event-program-editor__order" aria-hidden="true">
+                  {index + 1}
+                </span>
+                <span className="event-program-editor__name">
+                  <strong>{item.name}</strong>
+                  <span>
+                    <Badge tone={item.custom ? "amber" : "green"}>
+                      {item.custom ? "Vlastní" : "Katalog"}
+                    </Badge>
+                    {protectedItem ? (
+                      <Badge tone="blue">Použito ve zveřejněných párech</Badge>
+                    ) : null}
+                  </span>
+                </span>
+                <span className="event-program-editor__controls">
+                  <IconButton
+                    disabled={index === 0 || loading}
+                    label={`Posunout ${item.name} nahoru`}
+                    onClick={() => moveItem(index, -1)}
+                    type="button"
+                  >
+                    <ArrowUp aria-hidden="true" />
+                  </IconButton>
+                  <IconButton
+                    disabled={index === draftItems.length - 1 || loading}
+                    label={`Posunout ${item.name} dolů`}
+                    onClick={() => moveItem(index, 1)}
+                    type="button"
+                  >
+                    <ArrowDown aria-hidden="true" />
+                  </IconButton>
+                  <IconButton
+                    className="event-program-editor__remove"
+                    disabled={protectedItem || loading}
+                    label={
+                      protectedItem
+                        ? `${item.name} nelze odebrat, protože je použito ve zveřejněných párech`
+                        : `Odebrat ${item.name}`
+                    }
+                    onClick={() => removeItem(item)}
+                    type="button"
+                  >
+                    <Trash2 aria-hidden="true" />
+                  </IconButton>
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      ) : (
+        <p className="event-program-editor__empty">
+          Program je prázdný. Událost se při započítání párů bere jako jeden celek.
+        </p>
+      )}
+
+      <div className="event-program-editor__additions">
+        <div className="event-program-editor__add-row">
+          <label htmlFor="event-program-catalog">Přidat z katalogu</label>
+          <div>
+            <Select
+              disabled={!availableCatalog.length || loading}
+              id="event-program-catalog"
+              onChange={(inputEvent) => setCatalogChoice(inputEvent.target.value)}
+              value={catalogChoice}
+            >
+              <option value="">
+                {availableCatalog.length
+                  ? "Vyberte pásmo…"
+                  : "Všechna aktivní pásma jsou vybraná"}
+              </option>
+              {availableCatalog.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </Select>
+            <Button
+              disabled={!catalogChoice}
+              onClick={addCatalogItem}
+              size="small"
+              type="button"
+              variant="secondary"
+            >
+              <Plus aria-hidden="true" />
+              Přidat
+            </Button>
+          </div>
+        </div>
+        <div className="event-program-editor__add-row">
+          <label htmlFor="event-program-custom">Vlastní název pro tuto událost</label>
+          <div>
+            <input
+              disabled={loading}
+              id="event-program-custom"
+              maxLength={120}
+              onChange={(inputEvent) => setCustomName(inputEvent.target.value)}
+              onKeyDown={(keyboardEvent) => {
+                if (keyboardEvent.key === "Enter") {
+                  keyboardEvent.preventDefault();
+                  addCustomItem();
+                }
+              }}
+              placeholder="Např. Překvapení na závěr"
+              type="text"
+              value={customName}
+            />
+            <Button
+              disabled={!customName.trim()}
+              onClick={addCustomItem}
+              size="small"
+              type="button"
+              variant="secondary"
+            >
+              <Plus aria-hidden="true" />
+              Přidat
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {pairsPublished ? (
+        <p className="event-program-editor__hint">
+          Pásmo použité blokem zveřejněného párování lze přesunout, ale ne odebrat.
+        </p>
+      ) : null}
+      {validationError || error ? (
+        <p className="inline-error" role="alert">
+          {validationError || error}
+        </p>
+      ) : null}
+    </Card>
+  );
+}
+
+function MemberParticipationPanel({
+  event,
+  member,
+  members,
+  record,
+  wishIds,
+  canRespond,
+  loading,
+  error,
+  onResponse,
+  onSaveWishes,
+}: {
+  event: EnsembleEvent;
+  member: Member;
+  members: Member[];
+  record: AttendanceRecord;
+  wishIds: string[];
+  canRespond: boolean;
+  loading: boolean;
+  error?: string;
+  onResponse: (response: InterestStatus) => void;
+  onSaveWishes: (partnerIds: string[]) => void;
+}) {
+  const [selectedWishes, setSelectedWishes] = useState(
+    () => new Set(wishIds),
+  );
+  const eligiblePartners = members
+    .filter(
+      (candidate) =>
+        candidate.active &&
+        candidate.id !== member.id &&
+        candidate.role !== member.role,
+    )
+    .sort((first, second) =>
+      first.fullName.localeCompare(second.fullName, "cs"),
+    );
+
+  return (
+    <div className="member-participation">
+      <Card className="member-rsvp-card">
+        <div className="card-heading">
+          <div>
+            <span className="eyebrow">Moje účast</span>
+            <h2>Přijdete na tuto událost?</h2>
+            <p>
+              {canRespond
+                ? "Odpověď můžete do termínu kdykoli změnit."
+                : "Přijímání odpovědí je už uzavřené."}
+            </p>
+          </div>
+          <Badge
+            tone={
+              record.interest === "yes"
+                ? "green"
+                : record.interest === "no"
+                  ? "red"
+                  : record.interest === "maybe"
+                    ? "amber"
+                    : "neutral"
+            }
+          >
+            {interestLabels[record.interest]}
+          </Badge>
+        </div>
+        <div className="member-rsvp-actions" aria-label="Moje odpověď">
+          {interestActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <button
+                aria-pressed={record.interest === action.value}
+                className={record.interest === action.value ? "is-active" : ""}
+                disabled={!canRespond || loading}
+                key={action.value}
+                onClick={() => onResponse(action.value)}
+                type="button"
+              >
+                <Icon aria-hidden="true" />
+                {action.label}
+              </button>
+            );
+          })}
+          <button
+            aria-pressed={record.interest === "unset"}
+            className={record.interest === "unset" ? "is-active" : ""}
+            disabled={!canRespond || loading}
+            onClick={() => onResponse("unset")}
+            type="button"
+          >
+            <Minus aria-hidden="true" />
+            Bez odpovědi
+          </button>
+        </div>
+        {event.status === "closed" ? (
+          <div className="member-attendance-result">
+            <UserCheck aria-hidden="true" />
+            <span>
+              <small>Skutečná docházka</small>
+              <strong>{attendanceLabels[record.status]}</strong>
+            </span>
+            <strong>{formatPoints(displayedAttendancePoints(event, record))} b.</strong>
+          </div>
+        ) : null}
+      </Card>
+
+      <Card className="partner-wishes-card">
+        <div className="card-heading">
+          <div>
+            <span className="eyebrow">Přání pro generátor</span>
+            <h2>S kým byste si chtěli zatančit?</h2>
+            <p>
+              Můžete označit více jmen. Přání je soukromé a není zárukou
+              výsledného páru.
+            </p>
+          </div>
+          <HeartHandshake aria-hidden="true" />
+        </div>
+        <div className="partner-wish-grid">
+          {eligiblePartners.map((partner) => (
+            <label key={partner.id}>
+              <input
+                checked={selectedWishes.has(partner.id)}
+                disabled={!canRespond || loading}
+                onChange={(input) => {
+                  setSelectedWishes((current) => {
+                    const next = new Set(current);
+                    if (input.target.checked) next.add(partner.id);
+                    else next.delete(partner.id);
+                    return next;
+                  });
+                }}
+                type="checkbox"
+              />
+              <Avatar member={partner} size="small" />
+              <span>
+                <strong>{partner.fullName}</strong>
+                {partner.experienceKnown !== false ? (
+                  <small>{experienceLabels[partner.experience]}</small>
+                ) : null}
+              </span>
+            </label>
+          ))}
+        </div>
+        <footer className="partner-wishes-footer">
+          <small>Vybráno: {selectedWishes.size}</small>
+          <Button
+            disabled={!canRespond}
+            loading={loading}
+            onClick={() => onSaveWishes([...selectedWishes])}
+            size="small"
+          >
+            Uložit přání
+          </Button>
+        </footer>
+        {error ? (
+          <p className="inline-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </Card>
     </div>
   );
 }

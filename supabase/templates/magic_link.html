@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Přihlášení do NSP Akce</title>
+  </head>
+  <body style="margin:0;background:#f5f0e6;color:#2f261d;font-family:Arial,sans-serif">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+      <tr>
+        <td align="center" style="padding:28px 16px">
+          <table
+            role="presentation"
+            width="100%"
+            cellspacing="0"
+            cellpadding="0"
+            style="max-width:560px;background:#ffffff;border:1px solid #dfd4bf;border-radius:18px"
+          >
+            <tr>
+              <td style="padding:30px">
+                <p style="margin:0 0 8px;color:#8b1e2d;font-size:14px;font-weight:700">
+                  NÁRODOPISNÝ SOUBOR POSTŘEKOV
+                </p>
+                <h1 style="margin:0 0 18px;font-size:25px">Přihlášení do NSP Akce</h1>
+                <p style="margin:0 0 22px;line-height:1.55">
+                  Přihlaste se tlačítkem. Pokud se odkaz na mobilu otevře v okně
+                  e-mailu a nebude fungovat, opište do aplikace šestimístný kód níže.
+                </p>
+                <p style="margin:0 0 24px;text-align:center">
+                  <a
+                    href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&amp;type=email"
+                    style="display:inline-block;padding:13px 22px;border-radius:999px;background:#8b1e2d;color:#ffffff;text-decoration:none;font-weight:700"
+                  >Přihlásit se odkazem</a>
+                </p>
+                <p style="margin:0 0 8px;text-align:center;color:#75695b;font-size:13px">
+                  Nebo zadejte tento kód:
+                </p>
+                <p
+                  style="margin:0;text-align:center;letter-spacing:8px;font-size:30px;font-weight:700;color:#2f261d"
+                >{{ .Token }}</p>
+                <p style="margin:22px 0 0;color:#75695b;font-size:13px;line-height:1.5">
+                  Kód i odkaz jsou jednorázové a platí 15 minut. Pokud jste o
+                  přihlášení nežádali, e-mail můžete ignorovat.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

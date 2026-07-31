@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import type { SessionUser } from "../lib/demoData";
+import type { SessionUser } from "../lib/domain";
 import { BrandMark } from "./BrandMark";
 import { AppLink } from "./Router";
 
@@ -47,9 +47,9 @@ export function AppShell({
   const roleLabel =
     session.role === "admin"
       ? "Správce"
-      : session.role === "recorder"
-        ? "Zapisovatel"
-        : "Členský náhled";
+      : session.accessMode === "shared"
+        ? "Společný přehled"
+        : "Člen souboru";
 
   return (
     <div className="app-layout">

@@ -23,7 +23,7 @@ import {
   type EventType,
   type ExperienceLevel,
   type Member,
-} from "../lib/demoData";
+} from "../lib/domain";
 
 export function Button({
   variant = "primary",

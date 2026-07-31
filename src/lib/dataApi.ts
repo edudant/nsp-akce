@@ -1,6 +1,4 @@
-import type { AppApi } from "./demoData";
-import { demoApi } from "./demoData";
-import { isSupabaseConfigured } from "./supabase";
+import type { AppApi } from "./domain";
 import { supabaseApi } from "./supabaseData";
 
-export const appApi: AppApi = isSupabaseConfigured ? supabaseApi : demoApi;
+export const appApi: AppApi = supabaseApi;

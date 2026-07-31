@@ -6,7 +6,7 @@
  * returned IDs. Lower pair scores are better.
  */
 
-export const PAIRING_ALGORITHM_VERSION = 'mvp-1';
+export const PAIRING_ALGORITHM_VERSION = 'mvp-2';
 
 export type ExperienceLevel = 'beginner' | 'advanced' | 'experienced';
 export type PairingSeed = string | number;
@@ -37,12 +37,45 @@ export interface PairingPreference {
   validTo?: DateInput;
 }
 
+/**
+ * A member's event-wide, directional wish to dance with another member.
+ * Two opposite wishes for the same pair are treated as a stronger mutual wish.
+ * Wishes are always soft: forbidden PairingPreferences remain hard constraints.
+ */
+export interface PartnerWish {
+  memberId: string;
+  partnerId: string;
+  /** Multiplier between 0 and 1. Defaults to 1. */
+  strength?: number;
+}
+
+/**
+ * One named pairing assignment. An empty programItemIds list means that the
+ * assignment applies to the whole event. Array order defines the legacy round.
+ */
+export interface PairingBlock {
+  id: string;
+  name: string;
+  programItemIds?: readonly string[];
+}
+
 export interface PairingHistoryEntry {
   memberAId: string;
   memberBId: string;
   occurredAt: DateInput;
-  /** Allows an aggregated history row. Defaults to 1. */
+  /**
+   * Number of occurrences represented per program item. Defaults to 1. Each
+   * unique program item multiplies this count; a row without programs uses it
+   * directly for backward-compatible aggregated history.
+   */
   count?: number;
+  /** Programs in which this pair actually shared the assignment. */
+  programItemIds?: readonly string[];
+  /**
+   * Optional confidence/relevance multiplier for the repeat penalty. The
+   * human-readable occurrence count remains unweighted. Defaults to 1.
+   */
+  occurrenceWeight?: number;
   /**
    * Confirmed, actually danced history has full weight. A proposal that was
    * never confirmed has only `weights.proposalHistoryFactor` weight.
@@ -58,6 +91,8 @@ export interface LockedPair {
    * Use one row per round when a pair must be locked in multiple rounds.
    */
   round?: number;
+  /** Preferred named-block target. Can be used instead of round. */
+  blockId?: string;
 }
 
 export type CompatibleRolePair = readonly [leftRole: string, rightRole: string];
@@ -68,6 +103,10 @@ export interface PairingWeights {
   beginnerBeginner: number;
   beginnerExperiencedBonus: number;
   preferredBonus: number;
+  /** Reward for a one-sided, event-wide partner wish. */
+  partnerWishBonus: number;
+  /** Reward for a mutual, event-wide partner wish. Must exceed one-sided. */
+  mutualPartnerWishBonus: number;
   discouraged: number;
   /** Strongly discourages, but does not forbid, a repeat in the same event. */
   sameEventRepeat: number;
@@ -90,11 +129,18 @@ export interface PairingRequest {
   members: readonly PairingMember[];
   rounds?: number;
   /**
+   * Named replacements for rounds. Array order is retained as the one-based
+   * legacy round number. If omitted, `rounds` creates Kolo 1, Kolo 2, ...
+   */
+  pairingBlocks?: readonly PairingBlock[];
+  /**
    * Explicit compatible role directions. All left roles must be disjoint from
    * all right roles. If omitted, exactly two distinct roles are inferred.
    */
   compatibleRolePairs?: readonly CompatibleRolePair[];
   preferences?: readonly PairingPreference[];
+  /** Directional, event-wide soft wishes made by members. */
+  partnerWishes?: readonly PartnerWish[];
   history?: readonly PairingHistoryEntry[];
   lockedPairs?: readonly LockedPair[];
   seed?: PairingSeed;
@@ -112,6 +158,10 @@ export type PairingWarningCode =
   | 'DUPLICATE_MEMBER'
   | 'INVALID_MEMBER'
   | 'ROLE_CONFIGURATION'
+  | 'INVALID_BLOCK'
+  | 'DUPLICATE_BLOCK'
+  | 'PROGRAM_ITEM_OVERLAP'
+  | 'WHOLE_EVENT_BLOCK_CONFLICT'
   | 'UNSUPPORTED_ROLE'
   | 'INVALID_LOCK'
   | 'LOCK_CONFLICT'
@@ -125,12 +175,19 @@ export type PairingWarningCode =
 export interface PairingWarning {
   code: PairingWarningCode;
   round?: number;
+  blockId?: string;
+  blockName?: string;
   memberIds: string[];
   message: string;
 }
 
 export interface GeneratedPair {
   round: number;
+  blockId: string;
+  blockName: string;
+  programItemIds: string[];
+  /** Number of history occurrences represented by this assignment. */
+  occurrenceCount: number;
   memberAId: string;
   memberBId: string;
   locked: boolean;
@@ -152,6 +209,9 @@ export interface PairingBye {
 
 export interface PairingRoundResult {
   round: number;
+  blockId: string;
+  blockName: string;
+  programItemIds: string[];
   pairs: GeneratedPair[];
   byes: PairingBye[];
   /** True only if every eligible member is paired. */
@@ -163,6 +223,8 @@ export interface PairingResult {
   seed: string;
   variant: number;
   rounds: PairingRoundResult[];
+  /** Named view of rounds. Contains the same block result objects as rounds. */
+  blocks: PairingRoundResult[];
   warnings: PairingWarning[];
   eligibleMemberIds: string[];
 }
@@ -175,6 +237,8 @@ export const DEFAULT_PAIRING_WEIGHTS: Readonly<PairingWeights> = {
   beginnerBeginner: 36,
   beginnerExperiencedBonus: 18,
   preferredBonus: 8,
+  partnerWishBonus: 12,
+  mutualPartnerWishBonus: 24,
   // Deliberately dominates all ordinary preferences: this edge is retained so
   // maximum attendance stays possible, but is otherwise a last resort.
   discouraged: 100_000,
@@ -198,6 +262,7 @@ interface PairHistorySummary {
   weightedCount: number;
   actualCount: number;
   mostRecentAt?: number;
+  mostRecentWeight?: number;
 }
 
 interface PairCost {
@@ -230,6 +295,19 @@ interface PreferenceLookup {
   strength: number;
 }
 
+interface PartnerWishLookup {
+  mutual: boolean;
+  strength: number;
+}
+
+interface NormalizedPairingBlock {
+  round: number;
+  id: string;
+  name: string;
+  programItemIds: string[];
+  occurrenceCount: number;
+}
+
 /**
  * Generate maximum-cardinality, minimum-cost pairs for one or more rounds.
  * Invalid contradictory locks are reported and skipped; hard constraints are
@@ -240,6 +318,11 @@ export function generatePairings(request: PairingRequest): PairingResult {
   const seed = String(request.seed ?? 'nsp-pairing');
   const variant = toNonNegativeInteger(request.variant, 0);
   const numberOfRounds = Math.max(1, toPositiveInteger(request.rounds, 1));
+  const pairingBlocks = resolvePairingBlocks(
+    request.pairingBlocks,
+    numberOfRounds,
+    warnings,
+  );
   const weights: PairingWeights = {
     ...DEFAULT_PAIRING_WEIGHTS,
     ...request.weights,
@@ -296,20 +379,25 @@ export function generatePairings(request: PairingRequest): PairingResult {
   }
 
   if (!roleConfiguration.valid) {
+    const rounds = pairingBlocks.map((block) => ({
+      round: block.round,
+      blockId: block.id,
+      blockName: block.name,
+      programItemIds: [...block.programItemIds],
+      pairs: [],
+      byes: members.map((member) => ({
+        memberId: member.id,
+        reason: 'constraints' as const,
+        explanation: 'Člena nelze spárovat, dokud není opravena konfigurace rolí.',
+      })),
+      complete: members.length === 0,
+    }));
     return {
       algorithmVersion: PAIRING_ALGORITHM_VERSION,
       seed,
       variant,
-      rounds: Array.from({ length: numberOfRounds }, (_, index) => ({
-        round: index + 1,
-        pairs: [],
-        byes: members.map((member) => ({
-          memberId: member.id,
-          reason: 'constraints' as const,
-          explanation: 'Člena nelze spárovat, dokud není opravena konfigurace rolí.',
-        })),
-        complete: members.length === 0,
-      })),
+      rounds,
+      blocks: rounds,
       warnings,
       eligibleMemberIds: [],
     };
@@ -324,17 +412,19 @@ export function generatePairings(request: PairingRequest): PairingResult {
     request.preferences ?? [],
     asOf,
   );
+  const partnerWishes = buildPartnerWishLookup(request.partnerWishes ?? []);
   const history = buildHistoryLookup(request.history ?? [], weights);
   const locksByRound = groupLocksByRound(
     request.lockedPairs ?? [],
-    numberOfRounds,
+    pairingBlocks,
     warnings,
   );
   const eventByeCounts = new Map<string, number>();
   const pairingsInEvent = new Map<string, number>();
   const roundResults: PairingRoundResult[] = [];
 
-  for (let round = 1; round <= numberOfRounds; round += 1) {
+  for (const block of pairingBlocks) {
+    const round = block.round;
     const pairedMemberIds = new Set<string>();
     const generatedPairs: GeneratedPair[] = [];
     const roundLocks = locksByRound.get(round) ?? [];
@@ -354,6 +444,8 @@ export function generatePairings(request: PairingRequest): PairingResult {
         warnings.push({
           code: 'INVALID_LOCK',
           round,
+          blockId: block.id,
+          blockName: block.name,
           memberIds: lockIds,
           message: `Uzamčený pár ${lockIds.join(' – ')} obsahuje neznámého, nezpůsobilého nebo stejného člena.`,
         });
@@ -363,6 +455,8 @@ export function generatePairings(request: PairingRequest): PairingResult {
         warnings.push({
           code: 'LOCK_ROLE_INCOMPATIBLE',
           round,
+          blockId: block.id,
+          blockName: block.name,
           memberIds: lockIds,
           message: `Uzamčený pár ${memberLabel(memberA)} – ${memberLabel(memberB)} nemá kompatibilní párovací role.`,
         });
@@ -372,6 +466,8 @@ export function generatePairings(request: PairingRequest): PairingResult {
         warnings.push({
           code: 'LOCK_CONFLICT',
           round,
+          blockId: block.id,
+          blockName: block.name,
           memberIds: lockIds,
           message: `Uzamčený pár ${memberLabel(memberA)} – ${memberLabel(memberB)} koliduje s jiným uzamčeným párem v tomto kole.`,
         });
@@ -383,6 +479,8 @@ export function generatePairings(request: PairingRequest): PairingResult {
         warnings.push({
           code: 'LOCK_FORBIDDEN',
           round,
+          blockId: block.id,
+          blockName: block.name,
           memberIds: lockIds,
           message: `Uzamčený pár ${memberLabel(memberA)} – ${memberLabel(memberB)} je zároveň zakázaný; zákaz má přednost.`,
         });
@@ -401,6 +499,7 @@ export function generatePairings(request: PairingRequest): PairingResult {
         asOf,
         history: history.get(key),
         preference,
+        partnerWish: partnerWishes.get(key),
         sameEventRepeatCount,
         eventByeCounts,
         weights,
@@ -408,6 +507,10 @@ export function generatePairings(request: PairingRequest): PairingResult {
       });
       generatedPairs.push({
         round,
+        blockId: block.id,
+        blockName: block.name,
+        programItemIds: [...block.programItemIds],
+        occurrenceCount: block.occurrenceCount,
         memberAId: memberA.id,
         memberBId: memberB.id,
         locked: true,
@@ -418,10 +521,10 @@ export function generatePairings(request: PairingRequest): PairingResult {
       pairedMemberIds.add(memberB.id);
       if (sameEventRepeatCount > 0) {
         warnings.push(
-          repeatedPairWarning(memberA, memberB, round, sameEventRepeatCount),
+          repeatedPairWarning(memberA, memberB, block, sameEventRepeatCount),
         );
       }
-      pairingsInEvent.set(key, sameEventRepeatCount + 1);
+      pairingsInEvent.set(key, sameEventRepeatCount + block.occurrenceCount);
     }
 
     const leftMembers = eligibleMembers.filter(
@@ -466,6 +569,7 @@ export function generatePairings(request: PairingRequest): PairingResult {
           asOf,
           history: history.get(key),
           preference,
+          partnerWish: partnerWishes.get(key),
           sameEventRepeatCount,
           eventByeCounts,
           weights,
@@ -497,6 +601,10 @@ export function generatePairings(request: PairingRequest): PairingResult {
       }
       generatedPairs.push({
         round,
+        blockId: block.id,
+        blockName: block.name,
+        programItemIds: [...block.programItemIds],
+        occurrenceCount: block.occurrenceCount,
         memberAId: memberA.id,
         memberBId: memberB.id,
         locked: false,
@@ -509,10 +617,10 @@ export function generatePairings(request: PairingRequest): PairingResult {
       const sameEventRepeatCount = pairingsInEvent.get(key) ?? 0;
       if (sameEventRepeatCount > 0) {
         warnings.push(
-          repeatedPairWarning(memberA, memberB, round, sameEventRepeatCount),
+          repeatedPairWarning(memberA, memberB, block, sameEventRepeatCount),
         );
       }
-      pairingsInEvent.set(key, sameEventRepeatCount + 1);
+      pairingsInEvent.set(key, sameEventRepeatCount + block.occurrenceCount);
     }
 
     generatedPairs.sort(compareGeneratedPairs);
@@ -530,12 +638,15 @@ export function generatePairings(request: PairingRequest): PairingResult {
       });
       byes.push(bye);
       eventByeCounts.set(member.id, (eventByeCounts.get(member.id) ?? 0) + 1);
-      warnings.push(warningForBye(member, bye, round));
+      warnings.push(warningForBye(member, bye, block));
     }
     byes.sort((a, b) => compareIds(a.memberId, b.memberId));
 
     roundResults.push({
       round,
+      blockId: block.id,
+      blockName: block.name,
+      programItemIds: [...block.programItemIds],
       pairs: generatedPairs,
       byes,
       complete: byes.length === 0,
@@ -547,9 +658,100 @@ export function generatePairings(request: PairingRequest): PairingResult {
     seed,
     variant,
     rounds: roundResults,
+    blocks: roundResults,
     warnings,
     eligibleMemberIds: eligibleMembers.map((member) => member.id),
   };
+}
+
+function resolvePairingBlocks(
+  requestedBlocks: readonly PairingBlock[] | undefined,
+  legacyRounds: number,
+  warnings: PairingWarning[],
+): NormalizedPairingBlock[] {
+  if (!requestedBlocks || requestedBlocks.length === 0) {
+    return Array.from({ length: legacyRounds }, (_, index) => ({
+      round: index + 1,
+      id: `round-${index + 1}`,
+      name: `Kolo ${index + 1}`,
+      programItemIds: [],
+      occurrenceCount: 1,
+    }));
+  }
+
+  const candidates: Omit<NormalizedPairingBlock, 'round'>[] = [];
+  const seenBlockIds = new Set<string>();
+  for (const requestedBlock of requestedBlocks) {
+    const id = requestedBlock.id.trim();
+    const name = requestedBlock.name.trim();
+    if (!id || !name) {
+      warnings.push({
+        code: 'INVALID_BLOCK',
+        blockId: id || undefined,
+        blockName: name || undefined,
+        memberIds: [],
+        message: 'Párovací blok bez ID nebo názvu byl z generování vyřazen.',
+      });
+      continue;
+    }
+    if (seenBlockIds.has(id)) {
+      warnings.push({
+        code: 'DUPLICATE_BLOCK',
+        blockId: id,
+        blockName: name,
+        memberIds: [],
+        message: `Párovací blok „${name}“ má duplicitní ID ${id}; použit byl první blok.`,
+      });
+      continue;
+    }
+    seenBlockIds.add(id);
+    const programItemIds = uniqueNonEmptyIds(requestedBlock.programItemIds ?? []);
+    candidates.push({
+      id,
+      name,
+      programItemIds,
+      occurrenceCount: occurrenceCountForPrograms(programItemIds),
+    });
+  }
+
+  const wholeEventBlock = candidates.find(
+    (block) => block.programItemIds.length === 0,
+  );
+  if (wholeEventBlock && candidates.length > 1) {
+    warnings.push({
+      code: 'WHOLE_EVENT_BLOCK_CONFLICT',
+      blockId: wholeEventBlock.id,
+      blockName: wholeEventBlock.name,
+      memberIds: [],
+      message: `Blok „${wholeEventBlock.name}“ platí pro celou událost, proto nelze současně použít další párovací bloky.`,
+    });
+    return [{ ...wholeEventBlock, round: 1 }];
+  }
+
+  const claimedProgramItemIds = new Set<string>();
+  const nonOverlapping: Omit<NormalizedPairingBlock, 'round'>[] = [];
+  for (const candidate of candidates) {
+    const overlappingIds = candidate.programItemIds.filter((id) =>
+      claimedProgramItemIds.has(id),
+    );
+    if (overlappingIds.length > 0) {
+      warnings.push({
+        code: 'PROGRAM_ITEM_OVERLAP',
+        blockId: candidate.id,
+        blockName: candidate.name,
+        memberIds: [],
+        message: `Blok „${candidate.name}“ překrývá již použité části programu: ${overlappingIds.join(', ')}.`,
+      });
+      continue;
+    }
+    candidate.programItemIds.forEach((id) => claimedProgramItemIds.add(id));
+    nonOverlapping.push(candidate);
+  }
+
+  return nonOverlapping.map((block, index) => ({
+    ...block,
+    round: index + 1,
+  }));
 }
 
 function resolveRoleConfiguration(
@@ -635,6 +837,46 @@ function buildPreferenceLookup(
   return result;
 }
 
+function buildPartnerWishLookup(
+  wishes: readonly PartnerWish[],
+): Map<string, PartnerWishLookup> {
+  const directional = new Map<string, Map<string, number>>();
+  for (const wish of wishes) {
+    const memberId = wish.memberId.trim();
+    const partnerId = wish.partnerId.trim();
+    if (!memberId || !partnerId || memberId === partnerId) {
+      continue;
+    }
+    const requestedStrength = wish.strength ?? 1;
+    const strength = clamp(
+      Number.isFinite(requestedStrength) ? requestedStrength : 1,
+      0,
+      1,
+    );
+    if (strength === 0) {
+      continue;
+    }
+    const key = pairKey(memberId, partnerId);
+    const byRequester = directional.get(key) ?? new Map<string, number>();
+    byRequester.set(
+      memberId,
+      Math.max(byRequester.get(memberId) ?? 0, strength),
+    );
+    directional.set(key, byRequester);
+  }
+
+  const result = new Map<string, PartnerWishLookup>();
+  for (const [key, byRequester] of directional) {
+    const strengths = [...byRequester.values()];
+    const mutual = strengths.length >= 2;
+    const strength = mutual
+      ? strengths.reduce((sum, value) => sum + value, 0) / strengths.length
+      : (strengths[0] ?? 0);
+    result.set(key, { mutual, strength });
+  }
+  return result;
+}
+
 function buildHistoryLookup(
   historyEntries: readonly PairingHistoryEntry[],
   weights: PairingWeights,
@@ -648,11 +890,24 @@ function buildHistoryLookup(
     if (occurredAt === undefined) {
       continue;
     }
+    const programItemIds = uniqueNonEmptyIds(entry.programItemIds ?? []);
     const requestedCount = entry.count ?? 1;
-    const count = Math.max(
+    const countPerProgram = Math.max(
       0,
       Number.isFinite(requestedCount) ? requestedCount : 1,
     );
+    const count =
+      countPerProgram * occurrenceCountForPrograms(programItemIds);
+    const requestedOccurrenceWeight = entry.occurrenceWeight ?? 1;
+    const occurrenceWeight = Math.max(
+      0,
+      Number.isFinite(requestedOccurrenceWeight)
+        ? requestedOccurrenceWeight
+        : 1,
+    );
+    if (count === 0) {
+      continue;
+    }
     const actual = entry.actual !== false;
     const key = pairKey(entry.memberAId, entry.memberBId);
     const current = result.get(key) ?? {
@@ -660,12 +915,19 @@ function buildHistoryLookup(
       actualCount: 0,
     };
     current.weightedCount +=
-      count * (actual ? 1 : weights.proposalHistoryFactor);
+      count * occurrenceWeight * (actual ? 1 : weights.proposalHistoryFactor);
     current.actualCount += actual ? count : 0;
-    current.mostRecentAt = Math.max(
-      current.mostRecentAt ?? Number.NEGATIVE_INFINITY,
-      occurredAt,
-    );
+    const recencyWeight =
+      occurrenceWeight * (actual ? 1 : weights.proposalHistoryFactor);
+    if (current.mostRecentAt === undefined || occurredAt > current.mostRecentAt) {
+      current.mostRecentAt = occurredAt;
+      current.mostRecentWeight = recencyWeight;
+    } else if (occurredAt === current.mostRecentAt) {
+      current.mostRecentWeight = Math.max(
+        current.mostRecentWeight ?? 0,
+        recencyWeight,
+      );
+    }
     result.set(key, current);
   }
   return result;
@@ -673,17 +935,37 @@ function buildHistoryLookup(
 
 function groupLocksByRound(
   locks: readonly LockedPair[],
-  rounds: number,
+  blocks: readonly NormalizedPairingBlock[],
   warnings: PairingWarning[],
 ): Map<number, LockedPair[]> {
   const result = new Map<number, LockedPair[]>();
+  const blocksById = new Map(blocks.map((block) => [block.id, block]));
+  const blocksByRound = new Map(blocks.map((block) => [block.round, block]));
   for (const lock of locks) {
-    const round = lock.round ?? 1;
-    if (!Number.isInteger(round) || round < 1 || round > rounds) {
+    const requestedBlockId = lock.blockId?.trim();
+    const requestedBlock = requestedBlockId
+      ? blocksById.get(requestedBlockId)
+      : undefined;
+    const round = requestedBlock?.round ?? lock.round ?? 1;
+    const resolvedBlock = blocksByRound.get(round);
+    const targetsDifferentBlocks = Boolean(
+      requestedBlock && lock.round !== undefined && lock.round !== requestedBlock.round,
+    );
+    if (
+      (requestedBlockId && !requestedBlock) ||
+      targetsDifferentBlocks ||
+      !Number.isInteger(round) ||
+      !resolvedBlock
+    ) {
       warnings.push({
         code: 'INVALID_LOCK',
+        blockId: requestedBlockId,
         memberIds: [lock.memberAId, lock.memberBId],
-        message: `Uzamčený pár má neplatné číslo kola ${String(round)}.`,
+        message: requestedBlockId && !requestedBlock
+          ? `Uzamčený pár odkazuje na neznámý blok ${requestedBlockId}.`
+          : targetsDifferentBlocks
+            ? `Uzamčený pár odkazuje současně na rozdílný blok a kolo.`
+            : `Uzamčený pár má neplatné číslo kola ${String(round)}.`,
       });
       continue;
     }
@@ -691,6 +973,7 @@ function groupLocksByRound(
       memberAId: lock.memberAId.trim(),
       memberBId: lock.memberBId.trim(),
       round,
+      blockId: resolvedBlock.id,
     };
     const current = result.get(round) ?? [];
     current.push(normalized);
@@ -716,6 +999,7 @@ function calculatePairCost(input: {
   asOf: number;
   history?: PairHistorySummary;
   preference?: PreferenceLookup;
+  partnerWish?: PartnerWishLookup;
   sameEventRepeatCount: number;
   eventByeCounts: ReadonlyMap<string, number>;
   weights: PairingWeights;
@@ -730,6 +1014,7 @@ function calculatePairCost(input: {
     asOf,
     history,
     preference,
+    partnerWish,
     sameEventRepeatCount,
     eventByeCounts,
     weights,
@@ -738,7 +1023,7 @@ function calculatePairCost(input: {
   let score = 0;
   const reasons: string[] = [];
 
-  if (history && history.weightedCount > 0) {
+  if (history && (history.weightedCount > 0 || history.actualCount > 0)) {
     score += history.weightedCount * weights.repeat;
     if (history.actualCount > 0) {
       reasons.push(
@@ -756,7 +1041,8 @@ function calculatePairCost(input: {
         0,
         1 - ageDays / weights.recencyWindowDays,
       );
-      score += recencyFactor * weights.recency;
+      score +=
+        recencyFactor * weights.recency * (history.mostRecentWeight ?? 1);
       if (recencyFactor > 0) {
         reasons.push(
           ageDays === 0
@@ -796,6 +1082,14 @@ function calculatePairCost(input: {
     reasons.push(
       'Pár je označen jako nevhodný a byl použit jen v rámci nejlepšího dostupného úplného řešení.',
     );
+  }
+
+  if (partnerWish?.mutual) {
+    score -= weights.mutualPartnerWishBonus * partnerWish.strength;
+    reasons.push('Bylo zohledněno vzájemné přání tohoto páru.');
+  } else if (partnerWish) {
+    score -= weights.partnerWishBonus * partnerWish.strength;
+    reasons.push('Bylo zohledněno přání jednoho člena tančit v tomto páru.');
   }
 
   const sameEventByesA = eventByeCounts.get(memberA.id) ?? 0;
@@ -1032,21 +1326,26 @@ function classifyBye(input: {
 function warningForBye(
   member: PairingMember,
   bye: PairingBye,
-  round: number,
+  block: NormalizedPairingBlock,
 ): PairingWarning {
   const label = memberLabel(member);
+  const context = {
+    round: block.round,
+    blockId: block.id,
+    blockName: block.name,
+  };
   switch (bye.reason) {
     case 'no-allowed-partner':
       return {
         code: 'NO_ALLOWED_PARTNER',
-        round,
+        ...context,
         memberIds: [member.id],
         message: `Nelze spárovat člena ${label}: neexistuje povolený protějšek.`,
       };
     case 'constraints':
       return {
         code: 'CONSTRAINTS_PREVENT_COMPLETE_PAIRING',
-        round,
+        ...context,
         memberIds: [member.id],
         message: `Nelze spárovat člena ${label}: úplnému řešení brání kombinace omezení.`,
       };
@@ -1054,7 +1353,7 @@ function warningForBye(
     default:
       return {
         code: 'ROLE_IMBALANCE',
-        round,
+        ...context,
         memberIds: [member.id],
         message: `Člen ${label} v tomto kole střídá kvůli nevyváženému počtu rolí.`,
       };
@@ -1064,14 +1363,16 @@ function warningForBye(
 function repeatedPairWarning(
   memberA: PairingMember,
   memberB: PairingMember,
-  round: number,
+  block: NormalizedPairingBlock,
   previousCount: number,
 ): PairingWarning {
   return {
     code: 'PAIR_REPEATED_IN_EVENT',
-    round,
+    round: block.round,
+    blockId: block.id,
+    blockName: block.name,
     memberIds: [memberA.id, memberB.id],
-    message: `Pár ${memberLabel(memberA)} – ${memberLabel(memberB)} se v tomto kole opakuje; v události už spolu tančili ${previousCount}×.`,
+    message: `Pár ${memberLabel(memberA)} – ${memberLabel(memberB)} se v bloku „${block.name}“ opakuje; v události už spolu tančili ${previousCount}×.`,
   };
 }
 
@@ -1130,6 +1431,14 @@ function toTimestamp(value: DateInput | null | undefined): number | undefined {
         ? value
         : Date.parse(value);
   return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
+function uniqueNonEmptyIds(ids: readonly string[]): string[] {
+  return [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+}
+
+function occurrenceCountForPrograms(programItemIds: readonly string[]): number {
+  return programItemIds.length > 0 ? programItemIds.length : 1;
 }
 
 function pairKey(memberAId: string, memberBId: string): string {

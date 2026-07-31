@@ -5,6 +5,7 @@ import {
   Info,
   Lock,
   LockOpen,
+  Plus,
   RefreshCcw,
   Save,
   Search,
@@ -21,9 +22,11 @@ import { appApi } from "../lib/dataApi";
 import {
   type DancePair,
   type EnsembleEvent,
+  type EventProgramItem,
   type Member,
+  type PairingBlock as EventPairingBlock,
   type PairPreference,
-} from "../lib/demoData";
+} from "../lib/domain";
 import {
   generatePairings,
   type LockedPair,
@@ -49,6 +52,93 @@ function pairKey(round: number, firstId: string, secondId: string) {
   return `${round}:${[firstId, secondId].sort().join(":")}`;
 }
 
+interface StoredPairGroup {
+  key: string;
+  blockId?: string;
+  blockName: string;
+  round: number;
+  sortOrder: number;
+  programItemIds: string[];
+  appliesToAll: boolean;
+  pairs: DancePair[];
+}
+
+function uniqueIds(ids: readonly string[]) {
+  return [...new Set(ids.filter(Boolean))];
+}
+
+function groupStoredPairs(event: EnsembleEvent): StoredPairGroup[] {
+  const configuredBlocks = event.pairingBlocks ?? [];
+  const blocksById = new Map(
+    configuredBlocks.map((block) => [block.id, block]),
+  );
+  const groups = new Map<string, StoredPairGroup>();
+
+  for (const pair of event.pairs) {
+    const suppliedName = pair.blockName?.trim();
+    const configuredBlock = pair.blockId
+      ? blocksById.get(pair.blockId)
+      : configuredBlocks.find(
+          (block) =>
+            block.name === suppliedName && block.sortOrder === pair.round,
+        );
+    const key = pair.blockId
+      ? `block:${pair.blockId}`
+      : suppliedName
+        ? `name:${suppliedName}:round:${pair.round}`
+        : `legacy-round:${pair.round}`;
+    const programItemIds = uniqueIds(
+      pair.programItemIds?.length
+        ? pair.programItemIds
+        : (configuredBlock?.programItemIds ?? []),
+    );
+    const current = groups.get(key);
+    if (current) {
+      current.pairs.push(pair);
+      current.programItemIds = uniqueIds([
+        ...current.programItemIds,
+        ...programItemIds,
+      ]);
+      continue;
+    }
+    groups.set(key, {
+      key,
+      blockId: pair.blockId ?? configuredBlock?.id,
+      blockName: configuredBlock?.name ?? suppliedName ?? `Kolo ${pair.round}`,
+      round: pair.round,
+      sortOrder: configuredBlock?.sortOrder ?? pair.round,
+      programItemIds,
+      appliesToAll: configuredBlock?.appliesToAll ?? false,
+      pairs: [pair],
+    });
+  }
+
+  return [...groups.values()].sort(
+    (first, second) =>
+      first.sortOrder - second.sortOrder ||
+      first.round - second.round ||
+      first.blockName.localeCompare(second.blockName, "cs"),
+  );
+}
+
+function pairingBlocksAreValid(blocks: readonly EventPairingBlock[]) {
+  if (blocks.length === 0) return false;
+  const wholeEventBlocks = blocks.filter((block) => block.appliesToAll);
+  if (wholeEventBlocks.length > 0) {
+    return (
+      blocks.length === 1 &&
+      wholeEventBlocks.length === 1 &&
+      Boolean(wholeEventBlocks[0].name.trim())
+    );
+  }
+  const usedProgramIds = blocks.flatMap((block) => block.programItemIds);
+  return (
+    blocks.every(
+      (block) => block.name.trim() && block.programItemIds.length > 0,
+    ) && new Set(usedProgramIds).size === usedProgramIds.length
+  );
+}
+
 export function PairingPage({ canEdit }: { canEdit: boolean }) {
   const database = useDatabase();
   const queryClient = useQueryClient();
@@ -58,7 +148,10 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
     eventId: string;
     ids: Set<string>;
   } | null>(null);
-  const [rounds, setRounds] = useState(1);
+  const [blockSetup, setBlockSetup] = useState<{
+    eventId: string;
+    blocks: EventPairingBlock[];
+  } | null>(null);
   const [variant, setVariant] = useState(0);
   const [result, setResult] = useState<PairingResult | null>(null);
   const [lockedPairs, setLockedPairs] = useState<LockedPair[]>([]);
@@ -92,8 +185,15 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
   });
 
   const saveMutation = useMutation({
-    mutationFn: ({ pairs, publish }: { pairs: DancePair[]; publish: boolean }) =>
-      appApi.savePairs(resolvedEventId, pairs, publish),
+    mutationFn: ({
+      pairs,
+      publish,
+      blocks,
+    }: {
+      pairs: DancePair[];
+      publish: boolean;
+      blocks: EventPairingBlock[];
+    }) => appApi.savePairs(resolvedEventId, pairs, publish, blocks),
     onSuccess: async (_, variables) => {
       await queryClient.invalidateQueries({ queryKey: databaseQueryKey });
       setSaved(variables.publish ? "Páry jsou zveřejněné" : "Návrh je uložený");
@@ -124,6 +224,28 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
     ? database.data?.events.find((event) => event.id === resolvedEventId)
     : (publishedEventQuery.data ??
       database.data?.events.find((event) => event.id === resolvedEventId));
+  const storedBlocks = [...(selectedEvent?.pairingBlocks ?? [])].sort(
+    (first, second) => first.sortOrder - second.sortOrder,
+  );
+  const containsLegacyWholeEventRounds =
+    storedBlocks.length > 1 &&
+    storedBlocks.every(
+      (block) => block.appliesToAll && block.programItemIds.length === 0,
+    );
+  const defaultBlocks: EventPairingBlock[] =
+    storedBlocks.length > 0 && !containsLegacyWholeEventRounds
+      ? storedBlocks
+      : [
+          {
+            id: `whole-${resolvedEventId}`,
+            name: "Celá událost",
+            programItemIds: [],
+            appliesToAll: true,
+            sortOrder: 1,
+          },
+        ];
+  const pairingBlocks =
+    blockSetup?.eventId === resolvedEventId ? blockSetup.blocks : defaultBlocks;
   const activeMembers = useMemo(
     () => database.data?.members.filter((member) => member.active) ?? [],
     [database.data],
@@ -194,12 +316,23 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
     const history = database.data.events
       .filter((event) => event.id !== selectedEvent.id)
       .flatMap((event) =>
-        event.pairs.map((pair) => ({
-          memberAId: pair.leaderId,
-          memberBId: pair.followerId,
-          occurredAt: event.date,
-          actual: Boolean(pair.actual),
-        })),
+        event.pairs.map((pair) => {
+          const block = event.pairingBlocks?.find(
+            (candidate) => candidate.id === pair.blockId,
+          );
+          const programItemIds = pair.programItemIds?.length
+            ? pair.programItemIds
+            : block?.appliesToAll
+              ? (event.programItems ?? []).map((item) => item.id)
+              : block?.programItemIds;
+          return {
+            memberAId: pair.leaderId,
+            memberBId: pair.followerId,
+            occurredAt: event.date,
+            programItemIds,
+            actual: Boolean(pair.actual),
+          };
+        }),
       );
 
     const next = generatePairings({
@@ -217,9 +350,23 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
         : database.data.preferences.filter(
             (preference) => preference.kind === "forbidden",
           ),
+      partnerWishes: respectPreferences
+        ? (database.data.partnerWishes ?? [])
+            .filter((wish) => wish.eventId === selectedEvent.id)
+            .map((wish) => ({
+              memberId: wish.memberId,
+              partnerId: wish.partnerId,
+            }))
+        : [],
       history,
       lockedPairs,
-      rounds,
+      pairingBlocks: pairingBlocks.map((block) => ({
+        id: block.id,
+        name: block.name,
+        programItemIds: block.appliesToAll
+          ? (selectedEvent.programItems ?? []).map((item) => item.id)
+          : block.programItemIds,
+      })),
       seed: selectedEvent.id,
       variant: nextVariant,
       asOf: selectedEvent.date,
@@ -247,6 +394,9 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
           leaderId,
           followerId,
           round: round.round,
+          blockId: round.blockId,
+          blockName: round.blockName,
+          programItemIds: round.programItemIds,
           locked: pair.locked,
           reason: pair.explanation,
         };
@@ -278,6 +428,7 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
                 onChange={(event) => {
                   setEventId(event.target.value);
                   setSelection(null);
+                  setBlockSetup(null);
                   setResult(null);
                   setLockedPairs([]);
                   setVariant(0);
@@ -304,25 +455,15 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
               </div>
             ) : null}
 
-            <div className="field">
-              <span className="field__label">Počet tanečních kol</span>
-              <div className="round-picker">
-                {[1, 2, 3].map((round) => (
-                  <button
-                    aria-pressed={rounds === round}
-                    className={rounds === round ? "is-active" : ""}
-                    key={round}
-                    onClick={() => {
-                      setRounds(round);
-                      setResult(null);
-                    }}
-                    type="button"
-                  >
-                    {round}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <PairingBlockEditor
+              blocks={pairingBlocks}
+              onChange={(blocks) => {
+                setBlockSetup({ eventId: resolvedEventId, blocks });
+                setLockedPairs([]);
+                setResult(null);
+              }}
+              programItems={selectedEvent?.programItems ?? []}
+            />
 
             <div className="pairing-rules">
               <Toggle
@@ -346,7 +487,11 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
             </div>
 
             <Button
-              disabled={!canEdit || selectedMembers.length < 2}
+              disabled={
+                !canEdit ||
+                selectedMembers.length < 2 ||
+                !pairingBlocksAreValid(pairingBlocks)
+              }
               onClick={() => buildResult(variant)}
               size="large"
             >
@@ -419,7 +564,12 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
             </div>
           </Card>
 
-          {!result ? (
+          {!result && selectedEvent?.pairs.length ? (
+            <SavedPairsPreview
+              event={selectedEvent}
+              members={database.data.members}
+            />
+          ) : !result ? (
             <Card className="pairing-empty">
               <span className="pairing-empty__art" aria-hidden="true">
                 <Sparkles />
@@ -428,7 +578,7 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
               <span className="eyebrow">Připraveno ke generování</span>
               <h2>Nechte aplikaci navrhnout spravedlivé páry</h2>
               <p>
-                Vyberte účastníky, nastavte počet kol a spusťte generátor. Návrh
+                Vyberte účastníky, nastavte pásma a spusťte generátor. Návrh
                 můžete zamykat a nechat přepočítat.
               </p>
               <ul>
@@ -456,10 +606,13 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
                       (sum, round) => sum + round.pairs.length,
                       0,
                     )}{" "}
-                    dvojic v {result.rounds.length}{" "}
-                    {result.rounds.length === 1 ? "kole" : "kolech"}
+                    dvojic v {result.blocks.length}{" "}
+                    {result.blocks.length === 1 ? "bloku" : "blocích"}
                   </h2>
-                  <p>Varianta {result.variant + 1} · algoritmus {result.algorithmVersion}</p>
+                  <p>
+                    Varianta {result.variant + 1} · algoritmus{" "}
+                    {result.algorithmVersion}
+                  </p>
                 </div>
                 <div className="generated-header__actions">
                   <Button
@@ -479,7 +632,9 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
                   <div>
                     <strong>Návrh potřebuje pozornost</strong>
                     {result.warnings.slice(0, 3).map((warning) => (
-                      <p key={`${warning.code}-${warning.memberIds.join("-")}`}>
+                      <p
+                        key={`${warning.code}-${warning.blockId ?? warning.round ?? "event"}-${warning.memberIds.join("-")}`}
+                      >
                         {warning.message}
                       </p>
                     ))}
@@ -487,15 +642,26 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
                 </div>
               ) : null}
 
-              {result.rounds.map((round) => (
-                <Card className="pair-round" key={round.round}>
+              {result.blocks.map((round) => (
+                <Card className="pair-round" key={round.blockId}>
                   <header>
-                    <div>
-                      <span>Kolo {round.round}</span>
-                      <h3>
-                        {round.pairs.length}{" "}
-                        {round.pairs.length === 1 ? "pár" : "párů"}
-                      </h3>
+                    <div className="pair-round__heading">
+                      <div className="pair-round__title-line">
+                        <span>{round.blockName}</span>
+                        <h3>
+                          {round.pairs.length}{" "}
+                          {round.pairs.length === 1 ? "pár" : "párů"}
+                        </h3>
+                      </div>
+                      <BlockProgramSummary
+                        appliesToAll={Boolean(
+                          pairingBlocks.find(
+                            (block) => block.id === round.blockId,
+                          )?.appliesToAll,
+                        )}
+                        programItemIds={round.programItemIds}
+                        programItems={selectedEvent?.programItems ?? []}
+                      />
                     </div>
                     <Badge tone={round.complete ? "green" : "amber"}>
                       {round.complete ? "Kompletní" : "S volným členem"}
@@ -546,6 +712,7 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
                                       memberAId: pair.memberAId,
                                       memberBId: pair.memberBId,
                                       round: round.round,
+                                      blockId: round.blockId,
                                     },
                                   ],
                             );
@@ -568,7 +735,7 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
                             <strong>{member.fullName}</strong>
                             <small>{bye.explanation}</small>
                           </span>
-                          <Badge tone="amber">Volno v kole</Badge>
+                          <Badge tone="amber">Volno v bloku</Badge>
                         </div>
                       );
                     })}
@@ -600,6 +767,7 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
                       saveMutation.mutate({
                         pairs: generatedDancePairs(),
                         publish: false,
+                        blocks: pairingBlocks,
                       })
                     }
                     variant="secondary"
@@ -613,6 +781,7 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
                       saveMutation.mutate({
                         pairs: generatedDancePairs(),
                         publish: true,
+                        blocks: pairingBlocks,
                       })
                     }
                   >
@@ -646,9 +815,9 @@ function PublishedPairsView({
     event ?? events.find((availableEvent) => availableEvent.id === eventId);
   const publishedPairs =
     selectedEvent?.pairsPublished === true ? selectedEvent.pairs : [];
-  const rounds = [...new Set(publishedPairs.map((pair) => pair.round))].sort(
-    (first, second) => first - second,
-  );
+  const pairGroups = selectedEvent
+    ? groupStoredPairs({ ...selectedEvent, pairs: publishedPairs })
+    : [];
 
   return (
     <div className="page">
@@ -687,47 +856,14 @@ function PublishedPairsView({
         ) : null}
       </Card>
 
-      {publishedPairs.length > 0 ? (
+      {publishedPairs.length > 0 && selectedEvent ? (
         <section className="pairing-results" aria-label="Zveřejněné páry">
-          {rounds.map((round) => {
-            const roundPairs = publishedPairs.filter(
-              (pair) => pair.round === round,
-            );
-            return (
-              <Card className="pair-round" key={round}>
-                <header>
-                  <div>
-                    <span>Kolo {round}</span>
-                    <h2>
-                      {roundPairs.length}{" "}
-                      {roundPairs.length === 1 ? "pár" : "párů"}
-                    </h2>
-                  </div>
-                  <Badge tone="green">Zveřejněno</Badge>
-                </header>
-                <div className="generated-pairs">
-                  {roundPairs.map((pair, index) => {
-                    const leader = members.find(
-                      (member) => member.id === pair.leaderId,
-                    );
-                    const follower = members.find(
-                      (member) => member.id === pair.followerId,
-                    );
-                    if (!leader || !follower) return null;
-                    return (
-                      <PublishedPairCard
-                        actual={Boolean(pair.actual)}
-                        follower={follower}
-                        index={index}
-                        key={pair.id}
-                        leader={leader}
-                      />
-                    );
-                  })}
-                </div>
-              </Card>
-            );
-          })}
+          <StoredPairGroups
+            event={selectedEvent}
+            groups={pairGroups}
+            members={members}
+            status="published"
+          />
         </section>
       ) : (
         <Card className="pairing-empty">
@@ -742,6 +878,143 @@ function PublishedPairsView({
           </p>
         </Card>
       )}
+    </div>
+  );
+}
+
+function SavedPairsPreview({
+  event,
+  members,
+}: {
+  event: EnsembleEvent;
+  members: Member[];
+}) {
+  const groups = groupStoredPairs(event);
+  return (
+    <>
+      <Card className="generated-header">
+        <div>
+          <span className="eyebrow">Uložený návrh</span>
+          <h2>
+            {event.pairs.length} {event.pairs.length === 1 ? "dvojice" : "dvojic"}{" "}
+            v {groups.length} {groups.length === 1 ? "bloku" : "blocích"}
+          </h2>
+          <p>
+            {event.pairsPublished
+              ? "Tento návrh je zveřejněný členům."
+              : "Tento návrh zatím vidí pouze administrátoři."}
+          </p>
+        </div>
+        <Badge tone={event.pairsPublished ? "green" : "amber"}>
+          {event.pairsPublished ? "Zveřejněno" : "Uloženo jako návrh"}
+        </Badge>
+      </Card>
+      <StoredPairGroups
+        event={event}
+        groups={groups}
+        members={members}
+        status={event.pairsPublished ? "published" : "saved"}
+      />
+    </>
+  );
+}
+
+function StoredPairGroups({
+  event,
+  groups,
+  members,
+  status,
+}: {
+  event: EnsembleEvent;
+  groups: StoredPairGroup[];
+  members: Member[];
+  status: "published" | "saved";
+}) {
+  return (
+    <>
+      {groups.map((group) => (
+        <Card className="pair-round" key={group.key}>
+          <header>
+            <div className="pair-round__heading">
+              <div className="pair-round__title-line">
+                <span>{group.blockName || `Kolo ${group.round}`}</span>
+                <h3>
+                  {group.pairs.length}{" "}
+                  {group.pairs.length === 1 ? "pár" : "párů"}
+                </h3>
+              </div>
+              <BlockProgramSummary
+                appliesToAll={group.appliesToAll}
+                programItemIds={group.programItemIds}
+                programItems={event.programItems ?? []}
+              />
+            </div>
+            <Badge tone={status === "published" ? "green" : "amber"}>
+              {status === "published" ? "Zveřejněno" : "Uložený návrh"}
+            </Badge>
+          </header>
+          <div className="generated-pairs">
+            {group.pairs.map((pair, index) => {
+              const leader = members.find(
+                (member) => member.id === pair.leaderId,
+              );
+              const follower = members.find(
+                (member) => member.id === pair.followerId,
+              );
+              if (!leader || !follower) return null;
+              return (
+                <PublishedPairCard
+                  actual={Boolean(pair.actual)}
+                  follower={follower}
+                  index={index}
+                  key={pair.id}
+                  leader={leader}
+                />
+              );
+            })}
+          </div>
+        </Card>
+      ))}
+    </>
+  );
+}
+
+function BlockProgramSummary({
+  appliesToAll,
+  programItemIds,
+  programItems,
+}: {
+  appliesToAll: boolean;
+  programItemIds: readonly string[];
+  programItems: EventProgramItem[];
+}) {
+  const itemsById = new Map(programItems.map((item) => [item.id, item]));
+  const effectiveIds = appliesToAll
+    ? [...programItems]
+        .sort((first, second) => first.sortOrder - second.sortOrder)
+        .map((item) => item.id)
+    : uniqueIds(programItemIds);
+  const namedItems = effectiveIds
+    .map((id) => itemsById.get(id))
+    .filter((item): item is EventProgramItem => Boolean(item));
+
+  if (namedItems.length === 0) {
+    return appliesToAll ? (
+      <div className="pair-round__programs">
+        <span className="pair-round__program-label">Rozsah</span>
+        <span>Celá událost</span>
+      </div>
+    ) : null;
+  }
+
+  return (
+    <div className="pair-round__programs" aria-label="Pásma bloku">
+      <span className="pair-round__program-label">
+        {appliesToAll ? "Všechna pásma" : "Pásma"}
+      </span>
+      {namedItems.map((item) => (
+        <span key={item.id}>{item.name}</span>
+      ))}
     </div>
   );
 }
@@ -765,7 +1038,13 @@ function PublishedPairCard({
         <span>
           <strong>{leader.fullName}</strong>
           <small>
-            Tanečník · <ExperienceBadge level={leader.experience} />
+            Tanečník
+            {leader.experienceKnown !== false ? (
+              <>
+                {" · "}
+                <ExperienceBadge level={leader.experience} />
+              </>
+            ) : null}
           </small>
         </span>
       </div>
@@ -777,7 +1056,13 @@ function PublishedPairCard({
         <span>
           <strong>{follower.fullName}</strong>
           <small>
-            Tanečnice · <ExperienceBadge level={follower.experience} />
+            Tanečnice
+            {follower.experienceKnown !== false ? (
+              <>
+                {" · "}
+                <ExperienceBadge level={follower.experience} />
+              </>
+            ) : null}
           </small>
         </span>
       </div>
@@ -785,6 +1070,175 @@ function PublishedPairCard({
         {actual ? "Odtančeno" : "Naplánováno"}
       </Badge>
     </article>
+  );
+}
+
+function PairingBlockEditor({
+  blocks,
+  programItems,
+  onChange,
+}: {
+  blocks: EventPairingBlock[];
+  programItems: EventProgramItem[];
+  onChange: (blocks: EventPairingBlock[]) => void;
+}) {
+  const wholeEvent = blocks.length === 1 && blocks[0]?.appliesToAll;
+  const selectedElsewhere = (blockId: string) =>
+    new Set(
+      blocks
+        .filter((block) => block.id !== blockId)
+        .flatMap((block) => block.programItemIds),
+    );
+
+  const splitByPrograms = () => {
+    if (programItems.length === 0) return;
+    onChange(
+      programItems.map((item, index) => ({
+        id: `block-${item.id}`,
+        name: item.name,
+        programItemIds: [item.id],
+        appliesToAll: false,
+        sortOrder: index + 1,
+      })),
+    );
+  };
+
+  return (
+    <div className="pairing-block-editor">
+      <span className="field__label">Párovací bloky</span>
+      <p>Pár může platit pro celou událost nebo pro jedno či více pásem.</p>
+      <div className="pairing-scope-switch">
+        <button
+          aria-pressed={Boolean(wholeEvent)}
+          className={wholeEvent ? "is-active" : ""}
+          onClick={() =>
+            onChange([
+              {
+                id: "whole-event",
+                name: "Celá událost",
+                programItemIds: [],
+                appliesToAll: true,
+                sortOrder: 1,
+              },
+            ])
+          }
+          type="button"
+        >
+          Celá událost
+        </button>
+        <button
+          aria-pressed={!wholeEvent}
+          className={!wholeEvent ? "is-active" : ""}
+          disabled={programItems.length === 0}
+          onClick={splitByPrograms}
+          type="button"
+        >
+          Rozdělit podle pásem
+        </button>
+      </div>
+
+      {!wholeEvent ? (
+        <div className="pairing-block-list">
+          {blocks.map((block, index) => {
+            const unavailable = selectedElsewhere(block.id);
+            return (
+              <div className="pairing-block-item" key={block.id}>
+                <div>
+                  <input
+                    aria-label={`Název bloku ${index + 1}`}
+                    onChange={(input) =>
+                      onChange(
+                        blocks.map((item) =>
+                          item.id === block.id
+                            ? { ...item, name: input.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                    value={block.name}
+                  />
+                  <button
+                    aria-label={`Odstranit blok ${block.name}`}
+                    disabled={blocks.length === 1}
+                    onClick={() =>
+                      onChange(
+                        blocks
+                          .filter((item) => item.id !== block.id)
+                          .map((item, nextIndex) => ({
+                            ...item,
+                            sortOrder: nextIndex + 1,
+                          })),
+                      )
+                    }
+                    type="button"
+                  >
+                    <Trash2 aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="pairing-block-programs">
+                  {programItems.map((program) => (
+                    <label key={program.id}>
+                      <input
+                        checked={block.programItemIds.includes(program.id)}
+                        disabled={unavailable.has(program.id)}
+                        onChange={(input) =>
+                          onChange(
+                            blocks.map((item) =>
+                              item.id === block.id
+                                ? {
+                                    ...item,
+                                    programItemIds: input.target.checked
+                                      ? [...item.programItemIds, program.id]
+                                      : item.programItemIds.filter(
+                                          (id) => id !== program.id,
+                                        ),
+                                  }
+                                : item,
+                            ),
+                          )
+                        }
+                        type="checkbox"
+                      />
+                      {program.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          <Button
+            disabled={
+              blocks.flatMap((block) => block.programItemIds).length >=
+              programItems.length
+            }
+            onClick={() =>
+              onChange([
+                ...blocks,
+                {
+                  id: `block-${Date.now()}`,
+                  name: `Další blok ${blocks.length + 1}`,
+                  programItemIds: [],
+                  appliesToAll: false,
+                  sortOrder: blocks.length + 1,
+                },
+              ])
+            }
+            size="small"
+            type="button"
+            variant="secondary"
+          >
+            <Plus aria-hidden="true" />
+            Přidat blok
+          </Button>
+        </div>
+      ) : null}
+      {!pairingBlocksAreValid(blocks) ? (
+        <p className="pairing-block-error" role="status">
+          Každý blok musí mít název a alespoň jedno pásmo. Jedno pásmo může být
+          jen v jednom bloku.
+        </p>
+      ) : null}
+    </div>
   );
 }
 

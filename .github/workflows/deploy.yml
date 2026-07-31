@@ -36,6 +36,30 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.109.1
+
+      - name: Start isolated test database
+        run: supabase db start
+
+      - name: Lint and test database
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase db lint --local --level error
+          database_url="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          for test_file in \
+            supabase/tests/database_smoke_test.sql \
+            supabase/tests/member_accounts_and_programs_smoke_test.sql
+          do
+            result="$(psql "$database_url" -X -q -t -A -v ON_ERROR_STOP=1 -f "$test_file")"
+            echo "$result" | jq -e 'type == "object" and all(.[]; . == 0)'
+          done
+          psql "$database_url" -X -q -v ON_ERROR_STOP=1 \
+            -f supabase/tests/member_mvp_functional_test.sql >/dev/null
+
       - name: Build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
@@ -49,6 +73,10 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           path: dist
+
+      - name: Stop isolated test database
+        if: always()
+        run: supabase stop --no-backup
 
   deploy:
     environment:

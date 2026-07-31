@@ -357,6 +357,318 @@ describe('generatePairings', () => {
     expect(result.rounds.every((round) => round.complete)).toBe(true);
   });
 
+  it('keeps legacy rounds while exposing synthetic named blocks', () => {
+    const result = generatePairings({
+      members: [member('M1', 'M'), member('F1', 'F')],
+      compatibleRolePairs: rolePairs,
+      rounds: 2,
+      seed: 'legacy-blocks',
+    });
+
+    expect(result.rounds.map((round) => ({
+      round: round.round,
+      blockId: round.blockId,
+      blockName: round.blockName,
+      programItemIds: round.programItemIds,
+    }))).toEqual([
+      { round: 1, blockId: 'round-1', blockName: 'Kolo 1', programItemIds: [] },
+      { round: 2, blockId: 'round-2', blockName: 'Kolo 2', programItemIds: [] },
+    ]);
+    expect(result.blocks).toBe(result.rounds);
+    expect(result.rounds[0].pairs[0]).toEqual(
+      expect.objectContaining({
+        round: 1,
+        blockId: 'round-1',
+        blockName: 'Kolo 1',
+        programItemIds: [],
+        occurrenceCount: 1,
+      }),
+    );
+  });
+
+  it('uses named pairing blocks as ordered, backward-compatible rounds', () => {
+    const result = generatePairings({
+      members: [
+        member('M1', 'M'),
+        member('M2', 'M'),
+        member('F1', 'F'),
+        member('F2', 'F'),
+      ],
+      compatibleRolePairs: rolePairs,
+      rounds: 99,
+      pairingBlocks: [
+        {
+          id: 'postrekovo',
+          name: 'Postřekovo a Postřekoviny',
+          programItemIds: ['program-1', 'program-2'],
+        },
+        {
+          id: 'svatba',
+          name: 'Chodská svatba',
+          programItemIds: ['program-3'],
+        },
+      ],
+      seed: 'named-blocks',
+    });
+
+    expect(result.rounds).toHaveLength(2);
+    expect(result.rounds).toEqual([
+      expect.objectContaining({
+        round: 1,
+        blockId: 'postrekovo',
+        blockName: 'Postřekovo a Postřekoviny',
+        programItemIds: ['program-1', 'program-2'],
+      }),
+      expect.objectContaining({
+        round: 2,
+        blockId: 'svatba',
+        blockName: 'Chodská svatba',
+        programItemIds: ['program-3'],
+      }),
+    ]);
+    expect(result.rounds[0].pairs.every((pair) =>
+      pair.blockId === 'postrekovo' && pair.occurrenceCount === 2
+    )).toBe(true);
+  });
+
+  it('targets a named block when locking a pair', () => {
+    const result = generatePairings({
+      members: [
+        member('M1', 'M'),
+        member('M2', 'M'),
+        member('F1', 'F'),
+        member('F2', 'F'),
+      ],
+      compatibleRolePairs: rolePairs,
+      pairingBlocks: [
+        { id: 'first', name: 'První', programItemIds: ['p1'] },
+        { id: 'second', name: 'Druhý', programItemIds: ['p2'] },
+      ],
+      lockedPairs: [
+        { memberAId: 'M1', memberBId: 'F1', blockId: 'second' },
+      ],
+      seed: 'block-lock',
+    });
+
+    expect(result.rounds[1].pairs).toContainEqual(
+      expect.objectContaining({
+        round: 2,
+        blockId: 'second',
+        memberAId: 'M1',
+        memberBId: 'F1',
+        locked: true,
+      }),
+    );
+  });
+
+  it('rejects overlapping program blocks and a whole-event block conflict', () => {
+    const members = [member('M1', 'M'), member('F1', 'F')];
+    const overlapping = generatePairings({
+      members,
+      compatibleRolePairs: rolePairs,
+      pairingBlocks: [
+        { id: 'kept', name: 'Ponechaný', programItemIds: ['p1', 'p2'] },
+        { id: 'skipped', name: 'Překryv', programItemIds: ['p2', 'p3'] },
+      ],
+    });
+    const wholeEvent = generatePairings({
+      members,
+      compatibleRolePairs: rolePairs,
+      pairingBlocks: [
+        { id: 'all', name: 'Celá událost' },
+        { id: 'program', name: 'Jedno pásmo', programItemIds: ['p1'] },
+      ],
+    });
+
+    expect(overlapping.rounds.map((round) => round.blockId)).toEqual(['kept']);
+    expect(overlapping.warnings).toContainEqual(
+      expect.objectContaining({ code: 'PROGRAM_ITEM_OVERLAP', blockId: 'skipped' }),
+    );
+    expect(wholeEvent.rounds.map((round) => round.blockId)).toEqual(['all']);
+    expect(wholeEvent.warnings).toContainEqual(
+      expect.objectContaining({ code: 'WHOLE_EVENT_BLOCK_CONFLICT', blockId: 'all' }),
+    );
+  });
+
+  it('treats a one-sided partner wish as an event-wide soft preference', () => {
+    const result = generatePairings({
+      members: [
+        member('M1', 'M'),
+        member('M2', 'M'),
+        member('F1', 'F'),
+        member('F2', 'F'),
+      ],
+      compatibleRolePairs: rolePairs,
+      partnerWishes: [{ memberId: 'M1', partnerId: 'F1' }],
+      seed: 'one-sided-wish',
+    });
+
+    const wishedPair = result.rounds[0].pairs.find(
+      (pair) => pair.memberAId === 'M1' && pair.memberBId === 'F1',
+    );
+    expect(wishedPair).toBeDefined();
+    expect(wishedPair?.explanation).toContain('přání jednoho člena');
+  });
+
+  it('applies partner wishes to every named block in the event', () => {
+    const result = generatePairings({
+      members: [member('M1', 'M'), member('F1', 'F')],
+      compatibleRolePairs: rolePairs,
+      partnerWishes: [{ memberId: 'M1', partnerId: 'F1' }],
+      pairingBlocks: [
+        { id: 'first', name: 'První pásmo', programItemIds: ['p1'] },
+        { id: 'second', name: 'Druhé pásmo', programItemIds: ['p2'] },
+      ],
+      seed: 'event-wide-wish',
+    });
+
+    expect(result.rounds).toHaveLength(2);
+    expect(result.rounds.every((round) =>
+      round.pairs[0].explanation.includes('přání jednoho člena')
+    )).toBe(true);
+  });
+
+  it('gives a mutual partner wish a higher bonus than a one-sided wish', () => {
+    const result = generatePairings({
+      members: [
+        member('M1', 'M'),
+        member('M2', 'M'),
+        member('F1', 'F'),
+        member('F2', 'F'),
+      ],
+      compatibleRolePairs: rolePairs,
+      partnerWishes: [
+        { memberId: 'M1', partnerId: 'F1' },
+        { memberId: 'M1', partnerId: 'F2' },
+        { memberId: 'F2', partnerId: 'M1' },
+      ],
+      seed: 'mutual-wish',
+    });
+
+    const mutualPair = result.rounds[0].pairs.find(
+      (pair) => pair.memberAId === 'M1' && pair.memberBId === 'F2',
+    );
+    expect(mutualPair).toBeDefined();
+    expect(mutualPair?.explanation).toContain('vzájemné přání');
+  });
+
+  it('lets a forbidden pair override even a mutual partner wish and a lock', () => {
+    const result = generatePairings({
+      members: [member('M1', 'M'), member('F1', 'F')],
+      compatibleRolePairs: rolePairs,
+      preferences: [
+        { memberAId: 'M1', memberBId: 'F1', kind: 'forbidden' },
+      ],
+      partnerWishes: [
+        { memberId: 'M1', partnerId: 'F1' },
+        { memberId: 'F1', partnerId: 'M1' },
+      ],
+      lockedPairs: [{ memberAId: 'M1', memberBId: 'F1' }],
+    });
+
+    expect(result.rounds[0].pairs).toEqual([]);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({ code: 'LOCK_FORBIDDEN' }),
+    );
+  });
+
+  it('counts each historical program item and supports occurrence weighting', () => {
+    const baseRequest = {
+      members: [member('M1', 'M'), member('F1', 'F'), member('F2', 'F')],
+      compatibleRolePairs: rolePairs,
+      asOf: '2026-07-27',
+      seed: 'program-history',
+    } satisfies PairingRequest;
+    const fullWeight = generatePairings({
+      ...baseRequest,
+      history: [
+        {
+          memberAId: 'M1',
+          memberBId: 'F1',
+          occurredAt: '2026-07-20',
+          programItemIds: ['p1', 'p2', 'p2', 'p3'],
+          actual: true,
+        },
+        {
+          memberAId: 'M1',
+          memberBId: 'F2',
+          occurredAt: '2026-07-20',
+          programItemIds: ['p4'],
+          actual: true,
+        },
+      ],
+    });
+    const reducedWeight = generatePairings({
+      ...baseRequest,
+      history: [
+        {
+          memberAId: 'M1',
+          memberBId: 'F1',
+          occurredAt: '2026-07-20',
+          programItemIds: ['p1', 'p2', 'p3'],
+          occurrenceWeight: 0.1,
+          actual: true,
+        },
+        {
+          memberAId: 'M1',
+          memberBId: 'F2',
+          occurredAt: '2026-07-20',
+          programItemIds: ['p4'],
+          actual: true,
+        },
+      ],
+    });
+    const aggregatedPrograms = generatePairings({
+      members: [member('M1', 'M'), member('F1', 'F')],
+      compatibleRolePairs: rolePairs,
+      asOf: '2026-07-27',
+      history: [{
+        memberAId: 'M1',
+        memberBId: 'F1',
+        occurredAt: '2026-07-20',
+        count: 2,
+        programItemIds: ['p1', 'p2', 'p2'],
+        actual: true,
+      }],
+    });
+
+    expect(fullWeight.rounds[0].pairs[0]).toEqual(
+      expect.objectContaining({ memberAId: 'M1', memberBId: 'F2' }),
+    );
+    expect(reducedWeight.rounds[0].pairs[0]).toEqual(
+      expect.objectContaining({ memberAId: 'M1', memberBId: 'F1' }),
+    );
+    expect(reducedWeight.rounds[0].pairs[0].explanation).toContain(
+      'Společně tančili 3×',
+    );
+    expect(aggregatedPrograms.rounds[0].pairs[0].explanation).toContain(
+      'Společně tančili 4×',
+    );
+  });
+
+  it('uses program occurrence counts when penalizing repeats between blocks', () => {
+    const result = generatePairings({
+      members: [member('M1', 'M'), member('F1', 'F')],
+      compatibleRolePairs: rolePairs,
+      pairingBlocks: [
+        { id: 'three', name: 'Tři pásma', programItemIds: ['p1', 'p2', 'p3'] },
+        { id: 'one', name: 'Jedno pásmo', programItemIds: ['p4'] },
+      ],
+      seed: 'program-occurrences',
+    });
+
+    expect(result.rounds.map((round) => round.pairs[0].occurrenceCount)).toEqual([3, 1]);
+    expect(result.rounds[1].pairs[0].explanation).toContain(
+      'už spolu tančili 3×',
+    );
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        code: 'PAIR_REPEATED_IN_EVENT',
+        round: 2,
+      }),
+    );
+  });
+
   it('reuses the only compatible pair in a later round with an explicit warning', () => {
     const result = generatePairings({
       members: [member('M1', 'M'), member('F1', 'F')],

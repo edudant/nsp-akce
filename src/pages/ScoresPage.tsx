@@ -9,7 +9,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { calculateScores, roleLabels, type PairingRole } from "../lib/demoData";
+import { calculateScores, roleLabels, type PairingRole } from "../lib/domain";
 import { useDatabase } from "../components/DataContext";
 import { ErrorState, LoadingState } from "../components/DataStates";
 import { formatPoints } from "../components/formatters";
@@ -221,8 +221,13 @@ export function ScoresPage() {
                       <span>
                         <strong>{row.member.fullName}</strong>
                         <small>
-                          {roleLabels[row.member.role]} ·{" "}
-                          <ExperienceBadge level={row.member.experience} />
+                          {roleLabels[row.member.role]}
+                          {row.member.experienceKnown !== false ? (
+                            <>
+                              {" · "}
+                              <ExperienceBadge level={row.member.experience} />
+                            </>
+                          ) : null}
                         </small>
                       </span>
                     </div>
@@ -280,4 +285,3 @@ export function ScoresPage() {
     </div>
   );
 }
-

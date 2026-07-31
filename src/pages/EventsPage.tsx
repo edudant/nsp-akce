@@ -28,7 +28,13 @@ import { cs } from "date-fns/locale";
 import { type FormEvent, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { appApi } from "../lib/dataApi";
-import { type EnsembleEvent, type EventType } from "../lib/demoData";
+import {
+  attendanceLabels,
+  interestLabels,
+  type EnsembleEvent,
+  type EventType,
+  type ProgramCatalogItem,
+} from "../lib/domain";
 import { databaseQueryKey, useDatabase } from "../components/DataContext";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataStates";
 import { formatDate, todayInPrague } from "../components/formatters";
@@ -223,6 +229,7 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
           onClose={() => setCreateOpen(false)}
           onCreate={(input) => createMutation.mutate(input)}
           open={createOpen}
+          programCatalog={database.data.programCatalog ?? []}
         />
       ) : null}
     </div>
@@ -236,6 +243,8 @@ function EventRow({ event }: { event: EnsembleEvent }) {
   ).length;
   const total = event.attendance.length;
   const closed = event.status === "closed";
+  const personalRecord =
+    event.attendanceScope === "self" ? event.attendance[0] : undefined;
   const visibleCount = closed ? recorded : yes;
   const progress = total > 0 ? (100 * visibleCount) / total : 0;
 
@@ -270,7 +279,13 @@ function EventRow({ event }: { event: EnsembleEvent }) {
       <span className="event-row__attendance">
         <span>
           <UsersRound aria-hidden="true" />
-          {total > 0 ? (
+          {personalRecord ? (
+            <strong>
+              {closed
+                ? attendanceLabels[personalRecord.status]
+                : interestLabels[personalRecord.interest]}
+            </strong>
+          ) : total > 0 ? (
             <>
               <strong>{visibleCount}</strong> / {total}
             </>
@@ -279,15 +294,21 @@ function EventRow({ event }: { event: EnsembleEvent }) {
           )}
         </span>
         <small>
-          {total > 0
+          {personalRecord
+            ? closed
+              ? "moje docházka"
+              : "moje odpověď"
+            : total > 0
             ? closed
               ? "zapsaná docházka"
               : "potvrzený zájem"
             : "souhrn není zveřejněný"}
         </small>
-        <span className="progress">
-          <span style={{ width: `${progress}%` }} />
-        </span>
+        {!personalRecord ? (
+          <span className="progress">
+            <span style={{ width: `${progress}%` }} />
+          </span>
+        ) : null}
       </span>
       <span className="event-row__arrow">
         <ChevronRight aria-hidden="true" />
@@ -387,12 +408,14 @@ function CreateEventDialog({
   error,
   onClose,
   onCreate,
+  programCatalog,
 }: {
   open: boolean;
   loading: boolean;
   error?: string;
   onClose: () => void;
   onCreate: (event: CreateEventInput) => void;
+  programCatalog: ProgramCatalogItem[];
 }) {
   const [type, setType] = useState<EventType>("rehearsal");
   const [title, setTitle] = useState("Čtvrteční zkouška");
@@ -402,12 +425,37 @@ function CreateEventDialog({
   const [startTime, setStartTime] = useState("19:00");
   const [endTime, setEndTime] = useState("21:00");
   const [location, setLocation] = useState("Sokolovna Postřekov");
-  const [program, setProgram] = useState("");
+  const [selectedPrograms, setSelectedPrograms] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [customProgram, setCustomProgram] = useState("");
   const [weight, setWeight] = useState("1");
   const [capacity, setCapacity] = useState("8");
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
+    const chosenPrograms = programCatalog.filter((item) =>
+      selectedPrograms.has(item.id),
+    );
+    const programItems = [
+      ...chosenPrograms.map((item, index) => ({
+        id: `catalog-${item.id}`,
+        name: item.name,
+        catalogId: item.id,
+        custom: false,
+        sortOrder: index + 1,
+      })),
+      ...(customProgram.trim()
+        ? [
+            {
+              id: "custom-new",
+              name: customProgram.trim(),
+              custom: true,
+              sortOrder: chosenPrograms.length + 1,
+            },
+          ]
+        : []),
+    ];
     onCreate({
       title,
       type,
@@ -418,7 +466,8 @@ function CreateEventDialog({
       status: "open",
       weight: Number(weight),
       capacityPairs: Number(capacity),
-      program: program || undefined,
+      program: programItems.map((item) => item.name).join(", ") || undefined,
+      programItems,
       note: undefined,
       responseDeadline:
         type === "performance"
@@ -521,14 +570,40 @@ function CreateEventDialog({
             />
           </div>
         </Field>
-        <Field htmlFor="event-program" label="Program / pásmo">
-          <input
-            id="event-program"
-            onChange={(event) => setProgram(event.target.value)}
-            placeholder="Volitelné"
-            value={program}
-          />
-        </Field>
+        <fieldset className="program-picker">
+          <legend>Program / pásma</legend>
+          <p>Vyberte jedno nebo více pásem, která se budou na události tančit.</p>
+          <div>
+            {programCatalog
+              .filter((item) => item.active)
+              .sort((first, second) => first.sortOrder - second.sortOrder)
+              .map((item) => (
+                <label key={item.id}>
+                  <input
+                    checked={selectedPrograms.has(item.id)}
+                    onChange={(input) => {
+                      setSelectedPrograms((current) => {
+                        const next = new Set(current);
+                        if (input.target.checked) next.add(item.id);
+                        else next.delete(item.id);
+                        return next;
+                      });
+                    }}
+                    type="checkbox"
+                  />
+                  {item.name}
+                </label>
+              ))}
+          </div>
+          <Field htmlFor="event-custom-program" label="Jiné pásmo pro tuto událost">
+            <input
+              id="event-custom-program"
+              onChange={(event) => setCustomProgram(event.target.value)}
+              placeholder="Volitelné vlastní pásmo"
+              value={customProgram}
+            />
+          </Field>
+        </fieldset>
         <div className="form-grid">
           <Field htmlFor="event-weight" label="Bodová váha">
             <Select

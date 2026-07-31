@@ -11,9 +11,23 @@ import {
   UserCheck,
   UsersRound,
 } from "lucide-react";
-import { calculateScores } from "../lib/demoData";
-import { isSupabaseConfigured } from "../lib/supabase";
-import { useDatabase } from "../components/DataContext";
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  attendanceLabels,
+  calculateScores,
+  eventTypeLabels,
+  interestLabels,
+  type AppDatabase,
+  type EnsembleEvent,
+  type InterestStatus,
+} from "../lib/domain";
+import {
+  canRespondToEvent,
+  recentAttendanceEntries,
+} from "../lib/memberPortal";
+import { appApi } from "../lib/dataApi";
+import { databaseQueryKey, useDatabase } from "../components/DataContext";
 import { ErrorState, LoadingState } from "../components/DataStates";
 import {
   formatDate,
@@ -30,6 +44,10 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
   if (database.isLoading) return <LoadingState label="Chystám dnešní přehled…" />;
   if (database.isError || !database.data) {
     return <ErrorState onRetry={() => void database.refetch()} />;
+  }
+
+  if (database.data.accessMode === "member") {
+    return <MemberDashboard database={database.data} />;
   }
 
   const today = todayInPrague();
@@ -68,15 +86,18 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
       <PageHeader
         actions={
           canEdit ? (
-          <AppLink className="button button--primary button--medium" to="/udalosti">
-            <CalendarPlus aria-hidden="true" />
-            Přidat událost
-          </AppLink>
+            <AppLink
+              className="button button--primary button--medium"
+              to="/udalosti"
+            >
+              <CalendarPlus aria-hidden="true" />
+              Přidat událost
+            </AppLink>
           ) : null
         }
-        description={`${formatWeekday(today)} ${formatDate(today)} · aktuální sezona`}
-        eyebrow="Dobrý den"
-        title="Co je nového v souboru"
+        description={`${formatWeekday(today)} ${formatDate(today)} · akce, účast a páry`}
+        eyebrow="Přehled souboru"
+        title="Co se právě chystá"
       />
 
       <section
@@ -112,36 +133,48 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
               </div>
             </div>
             <div className="next-event-card__footer">
-              <div className="response-summary">
-                <span className="avatar-stack" aria-hidden="true">
-                  {activeMembers.slice(0, 4).map((member) => (
-                    <span key={member.id}>
-                      {member.fullName
-                        .split(" ")
-                        .map((part) => part[0])
-                        .join("")}
-                    </span>
-                  ))}
-                </span>
-                <span>
-                  <strong>
-                    {
-                      nextEvent.attendance.filter(
-                        (record) => record.interest === "yes",
-                      ).length
-                    }{" "}
-                    potvrzených
-                  </strong>
-                  <small>
-                    {
-                      nextEvent.attendance.filter(
-                        (record) => record.interest === "unset",
-                      ).length
-                    }{" "}
-                    bez odpovědi
-                  </small>
-                </span>
-              </div>
+              {nextEvent.attendanceScope !== "none" ? (
+                <div className="response-summary">
+                  <span className="avatar-stack" aria-hidden="true">
+                    {activeMembers.slice(0, 4).map((member) => (
+                      <span key={member.id}>
+                        {member.fullName
+                          .split(" ")
+                          .map((part) => part[0])
+                          .join("")}
+                      </span>
+                    ))}
+                  </span>
+                  <span>
+                    <strong>
+                      {
+                        nextEvent.attendance.filter(
+                          (record) => record.interest === "yes",
+                        ).length
+                      }{" "}
+                      potvrzených
+                    </strong>
+                    <small>
+                      {
+                        nextEvent.attendance.filter(
+                          (record) => record.interest === "unset",
+                        ).length
+                      }{" "}
+                      bez odpovědi
+                    </small>
+                  </span>
+                </div>
+              ) : (
+                <div className="response-summary response-summary--private">
+                  <UsersRound aria-hidden="true" />
+                  <span>
+                    <strong>Účast řeší přihlášení členové</strong>
+                    <small>
+                      Ve společném přehledu se osobní odpovědi neukazují.
+                    </small>
+                  </span>
+                </div>
+              )}
               <AppLink
                 className="button button--secondary button--medium"
                 to={`/udalosti/${nextEvent.id}`}
@@ -325,13 +358,275 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
         </Card>
       </section>
 
-      {!isSupabaseConfigured ? (
-        <div className="demo-notice" role="note">
-          <span>UKÁZKOVÝ REŽIM</span>
-          Pracujete s místními testovacími daty. Změny zůstanou uložené jen
-          v tomto prohlížeči.
-        </div>
-      ) : null}
     </div>
+  );
+}
+
+function MemberDashboard({ database }: { database: AppDatabase }) {
+  const queryClient = useQueryClient();
+  const [pendingEventId, setPendingEventId] = useState<string | null>(null);
+  const responseMutation = useMutation({
+    mutationFn: ({
+      eventId,
+      response,
+    }: {
+      eventId: string;
+      response: InterestStatus;
+    }) => appApi.updateMyResponse(eventId, response),
+    onMutate: ({ eventId }) => setPendingEventId(eventId),
+    onSettled: () => setPendingEventId(null),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: databaseQueryKey });
+    },
+  });
+  const today = todayInPrague();
+  const upcoming = database.events
+    .filter((event) => event.date >= today && event.status !== "cancelled")
+    .sort((first, second) => first.date.localeCompare(second.date));
+  const myScore = calculateScores(database).find(
+    (score) => score.member.id === database.myMemberId,
+  );
+  const ordered = [...upcoming].sort((first, second) => {
+    const firstResponse = myEventResponse(first, database.myMemberId);
+    const secondResponse = myEventResponse(second, database.myMemberId);
+    const firstNeedsResponse =
+      firstResponse === "unset" && canRespondToEvent(first, today);
+    const secondNeedsResponse =
+      secondResponse === "unset" && canRespondToEvent(second, today);
+    if (firstNeedsResponse !== secondNeedsResponse) {
+      return firstNeedsResponse ? -1 : 1;
+    }
+    return first.date.localeCompare(second.date);
+  });
+  const history = database.myHistory ?? [];
+  const orderedHistory = [...history].sort((first, second) =>
+    second.date.localeCompare(first.date),
+  );
+  const recentAttendance = recentAttendanceEntries(history, today);
+
+  return (
+    <div className="page page--dashboard page--member-home">
+      <PageHeader
+        description={`${formatWeekday(today)} ${formatDate(today)} · vaše akce, účast a body`}
+        eyebrow="Můj přehled"
+        title="Co vás čeká"
+      />
+
+      <section className="member-home-stats">
+        <Card className="member-score-card">
+          <span className="stat-icon stat-icon--amber">
+            <Medal aria-hidden="true" />
+          </span>
+          <span>
+            <small>Moje body</small>
+            <strong>{formatPoints(myScore?.total ?? 0)}</strong>
+            <em>{Math.round(myScore?.attendanceRate ?? 0)} % účast</em>
+          </span>
+          <AppLink className="text-link" to="/body">
+            Celý přehled <ArrowRight aria-hidden="true" />
+          </AppLink>
+        </Card>
+        <Card>
+          <span className="stat-icon stat-icon--green">
+            <CheckCircle2 aria-hidden="true" />
+          </span>
+          <span>
+            <small>Čeká na odpověď</small>
+            <strong>
+              {
+                upcoming.filter(
+                  (event) =>
+                    myEventResponse(event, database.myMemberId) === "unset" &&
+                    canRespondToEvent(event, today),
+                ).length
+              }
+            </strong>
+            <em>nadcházejících událostí</em>
+          </span>
+        </Card>
+      </section>
+
+      <section className="member-upcoming-section">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Potvrzení účasti</span>
+            <h2>Nadcházející události</h2>
+          </div>
+        </div>
+        <div className="member-event-list">
+          {ordered.slice(0, 6).map((event) => {
+            const response = myEventResponse(event, database.myMemberId);
+            const canRespond = canRespondToEvent(event, today);
+            return (
+              <Card className="member-event-card" key={event.id}>
+                <AppLink to={`/udalosti/${event.id}`}>
+                  <span className={`mini-date mini-date--${event.type}`}>
+                    <strong>{formatDate(event.date, "d")}</strong>
+                    <small>{formatDate(event.date, "MMM")}</small>
+                  </span>
+                  <span>
+                    <EventTypeBadge type={event.type} />
+                    <strong>{event.title}</strong>
+                    <small>
+                      {event.startTime} · {event.location}
+                    </small>
+                  </span>
+                  <ArrowRight aria-hidden="true" />
+                </AppLink>
+                <div className="member-event-rsvp">
+                  <Badge
+                    tone={
+                      response === "yes"
+                        ? "green"
+                        : response === "no"
+                          ? "red"
+                          : response === "maybe"
+                            ? "amber"
+                            : "neutral"
+                    }
+                  >
+                    {interestLabels[response]}
+                  </Badge>
+                  <div>
+                    {(
+                      [
+                        ["yes", "Ano"],
+                        ["no", "Ne"],
+                        ["maybe", "Nevím"],
+                        ["substitute", "Náhradník"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        aria-pressed={response === value}
+                        className={response === value ? "is-active" : ""}
+                        disabled={!canRespond || pendingEventId === event.id}
+                        key={value}
+                        onClick={() =>
+                          responseMutation.mutate({
+                            eventId: event.id,
+                            response: value,
+                          })
+                        }
+                        type="button"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+        {responseMutation.isError ? (
+          <p className="inline-error" role="alert">
+            Odpověď se nepodařilo uložit. Zkuste to prosím znovu.
+          </p>
+        ) : null}
+      </section>
+
+      <Card className="member-history-card">
+        <div className="card-heading">
+          <div>
+            <span className="eyebrow">Moje historie</span>
+            <h2>Poslední účast</h2>
+          </div>
+        </div>
+        <div className="member-history-list">
+          {recentAttendance.map((entry) => (
+            <AppLink key={entry.eventId} to={`/udalosti/${entry.eventId}`}>
+              <span>{formatDate(entry.date)}</span>
+              <strong>{entry.title}</strong>
+              <Badge
+                tone={
+                  entry.attendance === "present" ||
+                  entry.attendance === "partial"
+                    ? "green"
+                    : entry.attendance === "absent"
+                      ? "red"
+                      : "neutral"
+                }
+              >
+                {entry.attendance === "present"
+                  ? "Přítomen"
+                  : entry.attendance === "partial"
+                    ? "Částečně"
+                    : entry.attendance === "absent"
+                      ? "Nepřítomen"
+                      : entry.attendance === "excused"
+                        ? "Omluven"
+                        : "Nezapsáno"}
+              </Badge>
+              <strong>{formatPoints(entry.points)} b.</strong>
+            </AppLink>
+          ))}
+          {recentAttendance.length === 0 ? (
+            <p>Zatím nemáte uzavřenou událost se zapsanou docházkou.</p>
+          ) : null}
+        </div>
+      </Card>
+
+      <Card className="member-full-history-card">
+        <details>
+          <summary>
+            <span>
+              <span className="eyebrow">Moje historie</span>
+              <strong>Všechny odpovědi, účast a páry</strong>
+            </span>
+            <Badge tone="blue">{orderedHistory.length}</Badge>
+          </summary>
+          <div className="member-full-history-list">
+            {orderedHistory.map((entry) => (
+              <article key={entry.eventId}>
+                <header>
+                  <span>
+                    <AppLink to={`/udalosti/${entry.eventId}`}>
+                      {entry.title}
+                    </AppLink>
+                    <small>
+                      {formatDate(entry.date)} · {eventTypeLabels[entry.type]}
+                    </small>
+                  </span>
+                  <strong>{formatPoints(entry.points)} b.</strong>
+                </header>
+                <div className="member-full-history-facts">
+                  <span>Odpověď: {interestLabels[entry.response]}</span>
+                  <span>Docházka: {attendanceLabels[entry.attendance]}</span>
+                </div>
+                {entry.pairs.length ? (
+                  <ul>
+                    {entry.pairs.map((pair, index) => (
+                      <li
+                        key={`${entry.eventId}-${pair.partnerId}-${pair.blockName ?? index}`}
+                      >
+                        <strong>{pair.partnerName}</strong>
+                        {pair.blockName ? ` · ${pair.blockName}` : ""}
+                        {pair.programNames.length
+                          ? ` · ${pair.programNames.join(", ")}`
+                          : ""}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </article>
+            ))}
+            {orderedHistory.length === 0 ? (
+              <p>Zatím tu není žádná událost.</p>
+            ) : null}
+          </div>
+        </details>
+      </Card>
+    </div>
+  );
+}
+
+function myEventResponse(
+  event: EnsembleEvent,
+  memberId: string | undefined,
+): InterestStatus {
+  if (!memberId) return "unset";
+  return (
+    event.attendance.find((record) => record.memberId === memberId)?.interest ??
+    "unset"
   );
 }
