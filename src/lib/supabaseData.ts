@@ -1,6 +1,7 @@
 import { getEmailAuthErrorMessage } from "./auth";
 import type {
   AccessMode,
+  AgeGroup,
   AppApi,
   AppDatabase,
   AppRole,
@@ -31,6 +32,7 @@ interface MemberRow {
   short_name: string;
   pairing_role: "lead" | "follow";
   experience_level: ExperienceLevel;
+  age_group: AgeGroup | null;
   active_from: string | null;
   is_active: boolean;
   admin_note?: string | null;
@@ -401,6 +403,7 @@ function memberFromRow(row: MemberRow, account?: MemberAccount): Member {
     role: pairingRole(row.pairing_role),
     experience: row.experience_level,
     experienceKnown: true,
+    ageGroup: row.age_group ?? null,
     active: row.is_active,
     joinedAt: row.active_from ?? new Date().toISOString().slice(0, 10),
     note: row.admin_note ?? undefined,
@@ -823,6 +826,7 @@ function leaderboardMember(
     role: pairingRole(score.pairingRole),
     experience: isOwn ? own.experienceLevel : "advanced",
     experienceKnown: isOwn,
+    ageGroup: null,
     active: true,
     joinedAt: "",
   };
@@ -956,6 +960,7 @@ async function getMemberDatabase(): Promise<AppDatabase> {
       role: pairingRole(home.member.pairingRole),
       experience: home.member.experienceLevel,
       experienceKnown: true,
+      ageGroup: null,
       active: true,
       joinedAt: "",
     });
@@ -1045,6 +1050,7 @@ function sharedMember(score: SharedScore): Member {
     role: pairingRole(score.pairingRole),
     experience: "advanced",
     experienceKnown: false,
+    ageGroup: null,
     active: true,
     joinedAt: "",
   };
@@ -1549,6 +1555,7 @@ export const supabaseApi: AppApi = {
     if ("experience" in patch) {
       databasePatch.experience_level = patch.experience;
     }
+    if ("ageGroup" in patch) databasePatch.age_group = patch.ageGroup ?? null;
     if ("active" in patch) databasePatch.is_active = patch.active;
     if ("joinedAt" in patch) databasePatch.active_from = patch.joinedAt || null;
     if ("note" in patch) databasePatch.admin_note = patch.note ?? null;
@@ -1574,6 +1581,7 @@ export const supabaseApi: AppApi = {
           short_name: input.shortName,
           pairing_role: input.role === "leader" ? "lead" : "follow",
           experience_level: input.experience,
+          age_group: input.ageGroup,
           is_active: input.active,
           active_from: input.joinedAt || null,
           admin_note: input.note ?? null,

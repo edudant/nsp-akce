@@ -118,8 +118,16 @@ declare
   v_result jsonb;
   v_created_id uuid;
   v_note text;
+  v_age_group public.member_age_group;
   v_error_state text;
 begin
+  select staff.age_group into v_age_group
+  from public.get_staff_members() staff
+  where staff.id = 'f4000000-0000-4000-8000-000000000001';
+  if v_age_group is not null then
+    raise exception 'An existing member should remain unclassified after migration.';
+  end if;
+
   -- This is the exact access shape that used to fail in the application.
   -- It must keep failing because granting direct SELECT on admin_note would
   -- expose a member's private administrative note through PostgREST.
@@ -141,22 +149,38 @@ begin
     'f4000000-0000-4000-8000-000000000001',
     jsonb_build_object(
       'display_name', 'Updated profile target',
+      'age_group', 'young',
       'active_from', '2004-03-02',
       'admin_note', 'Updated private note'
     )
   );
   if v_result ->> 'display_name' <> 'Updated profile target'
+     or v_result ->> 'age_group' <> 'young'
      or v_result ->> 'active_from' <> '2004-03-02'
      or v_result ->> 'admin_note' <> 'Updated private note' then
     raise exception 'Administrator profile update returned unexpected data: %',
       v_result;
   end if;
 
-  select staff.admin_note into v_note
+  select staff.admin_note, staff.age_group into v_note, v_age_group
   from public.get_staff_members() staff
   where staff.id = 'f4000000-0000-4000-8000-000000000001';
-  if v_note <> 'Updated private note' then
+  if v_note <> 'Updated private note' or v_age_group <> 'young' then
     raise exception 'Administrator profile update was not persisted.';
+  end if;
+
+  v_error_state := null;
+  begin
+    perform public.save_member_profile(
+      'f4000000-0000-4000-8000-000000000001',
+      jsonb_build_object('age_group', 'middle')
+    );
+  exception when others then
+    get stacked diagnostics v_error_state = returned_sqlstate;
+  end;
+  if v_error_state is distinct from '22P02' then
+    raise exception 'Invalid member age group should fail with 22P02, got %.',
+      v_error_state;
   end if;
 
   v_result := public.save_member_profile(
@@ -166,6 +190,7 @@ begin
       'short_name', 'Created target',
       'pairing_role', 'follow',
       'experience_level', 'beginner',
+      'age_group', 'old',
       'active_from', '2001-09-15',
       'is_active', true,
       'admin_note', 'Created private note'
@@ -173,10 +198,26 @@ begin
   );
   v_created_id := (v_result ->> 'id')::uuid;
   if v_created_id is null
+     or v_result ->> 'age_group' <> 'old'
      or v_result ->> 'active_from' <> '2001-09-15'
      or v_result ->> 'admin_note' <> 'Created private note' then
     raise exception 'Administrator profile insert returned unexpected data: %',
       v_result;
+  end if;
+
+  v_result := public.save_member_profile(
+    v_created_id,
+    jsonb_build_object('age_group', null)
+  );
+  if v_result ->> 'age_group' is not null then
+    raise exception 'Administrator could not clear the optional age group: %',
+      v_result;
+  end if;
+  select m.age_group into v_age_group
+  from public.members m
+  where m.id = v_created_id;
+  if v_age_group is not null then
+    raise exception 'Cleared member age group was not persisted.';
   end if;
 
   -- EXECUTE is granted to authenticated so PostgREST can expose the RPC, but
@@ -213,6 +254,23 @@ do $test$
 declare
   v_function_oid oid;
 begin
+  if not has_column_privilege(
+    'authenticated',
+    'public.members',
+    'age_group',
+    'SELECT'
+  ) then
+    raise exception 'authenticated is missing SELECT on members.age_group.';
+  end if;
+  if has_column_privilege(
+    'anon',
+    'public.members',
+    'age_group',
+    'SELECT'
+  ) then
+    raise exception 'anon unexpectedly has SELECT on members.age_group.';
+  end if;
+
   if has_column_privilege(
     'authenticated',
     'public.members',

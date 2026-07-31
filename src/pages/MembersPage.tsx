@@ -14,12 +14,15 @@ import { type FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { appApi } from "../lib/dataApi";
 import {
+  ageGroupLabel,
+  ageGroupLabels,
   attendanceLabels,
   calculateScores,
   eventTypeLabels,
   experienceLabels,
   interestLabels,
   roleLabels,
+  type AgeGroup,
   type AppRole,
   type ExperienceLevel,
   type Member,
@@ -27,6 +30,10 @@ import {
   type PairingRole,
   type ScoreRow,
 } from "../lib/domain";
+import {
+  filterMembers,
+  type MemberAgeGroupFilter,
+} from "../lib/memberFilters";
 import { databaseQueryKey, useDatabase } from "../components/DataContext";
 import { DateWithYearInput } from "../components/DateWithYearInput";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataStates";
@@ -63,6 +70,7 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"active" | "all" | "inactive">("active");
   const [role, setRole] = useState<"all" | PairingRole>("all");
+  const [ageGroup, setAgeGroup] = useState<MemberAgeGroupFilter>("all");
   const [editing, setEditing] = useState<Member | "new" | null>(null);
   const editingMemberId =
     editing !== null && editing !== "new" ? editing.id : null;
@@ -131,23 +139,13 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
 
   const filteredMembers = useMemo(() => {
     if (!database.data) return [];
-    const term = search.trim().toLocaleLowerCase("cs");
-    return database.data.members
-      .filter((member) => {
-        if (status === "active") return member.active;
-        if (status === "inactive") return !member.active;
-        return true;
-      })
-      .filter((member) => role === "all" || member.role === role)
-      .filter((member) =>
-        `${member.fullName} ${member.shortName}`
-          .toLocaleLowerCase("cs")
-          .includes(term),
-      )
-      .sort((first, second) =>
-        first.fullName.localeCompare(second.fullName, "cs"),
-      );
-  }, [database.data, role, search, status]);
+    return filterMembers(database.data.members, {
+      ageGroup,
+      role,
+      search,
+      status,
+    });
+  }, [ageGroup, database.data, role, search, status]);
 
   if (database.isLoading) return <LoadingState label="Načítám členy…" />;
   if (database.isError || !database.data) {
@@ -155,6 +153,9 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
   }
 
   const activeMembers = database.data.members.filter((member) => member.active);
+  const unassignedMembers = database.data.members.filter(
+    (member) => member.ageGroup === null,
+  ).length;
   const beginners = activeMembers.filter(
     (member) => member.experience === "beginner",
   ).length;
@@ -180,7 +181,7 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
             </Button>
           ) : null
         }
-        description="Párovací role a zkušenost používá generátor k vyváženým návrhům."
+        description="Zařazení usnadňuje přehled a filtrování; párovací role a zkušenost používá generátor párů."
         eyebrow="Správa souboru"
         title="Členové"
       />
@@ -247,7 +248,7 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
               <span className="sr-only">Hledat člena</span>
               <input
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Hledat jméno…"
+                placeholder="Hledat jméno nebo zařazení…"
                 type="search"
                 value={search}
               />
@@ -263,6 +264,20 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
               <option value="leader">Tanečníci</option>
               <option value="follower">Tanečnice</option>
             </Select>
+            <Select
+              aria-label="Filtrovat zařazení"
+              onChange={(event) =>
+                setAgeGroup(event.target.value as MemberAgeGroupFilter)
+              }
+              value={ageGroup}
+            >
+              <option value="all">Všechna zařazení</option>
+              <option value="young">Mladí</option>
+              <option value="old">Staří</option>
+              <option value="unassigned">
+                Nezařazeno ({unassignedMembers})
+              </option>
+            </Select>
           </div>
         </header>
 
@@ -274,6 +289,7 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
                   <th scope="col">Člen</th>
                   <th scope="col">Párovací role</th>
                   <th scope="col">Zkušenost</th>
+                  <th scope="col">Zařazení</th>
                   <th scope="col">Členem od</th>
                   <th scope="col">Stav</th>
                   <th scope="col">Účet</th>
@@ -319,6 +335,9 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
                     <td data-label="Role">{roleLabels[member.role]}</td>
                     <td data-label="Zkušenost">
                       <ExperienceBadge level={member.experience} />
+                    </td>
+                    <td data-label="Zařazení">
+                      <MemberAgeGroupBadge ageGroup={member.ageGroup} />
                     </td>
                     <td data-label="Členem od">
                       {formatDate(member.joinedAt, "MMMM yyyy")}
@@ -378,6 +397,18 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
         }}
       />
     </div>
+  );
+}
+
+function MemberAgeGroupBadge({
+  ageGroup,
+}: {
+  ageGroup: AgeGroup | null;
+}) {
+  const tone =
+    ageGroup === "young" ? "blue" : ageGroup === "old" ? "purple" : "neutral";
+  return (
+    <Badge tone={tone}>{ageGroupLabel(ageGroup)}</Badge>
   );
 }
 
@@ -496,6 +527,9 @@ function MemberForm({
   const [experience, setExperience] = useState<ExperienceLevel>(
     member?.experience ?? "beginner",
   );
+  const [ageGroup, setAgeGroup] = useState<AgeGroup | "">(
+    member?.ageGroup ?? "",
+  );
   const [joinedAt, setJoinedAt] = useState(
     member?.joinedAt ?? todayInPrague(),
   );
@@ -514,6 +548,7 @@ function MemberForm({
         shortName: shortName || fullName,
         role,
         experience,
+        ageGroup: ageGroup || null,
         joinedAt,
         active,
         note: note || undefined,
@@ -551,7 +586,7 @@ function MemberForm({
           />
         </Field>
       </div>
-      <div className="form-grid">
+      <div className="form-grid form-grid--3">
         <Field htmlFor="member-role" label="Párovací role">
           <Select
             id="member-role"
@@ -574,6 +609,26 @@ function MemberForm({
             value={experience}
           >
             {Object.entries(experienceLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field
+          hint="Slouží pro přehled a filtrování; neovlivňuje párování."
+          htmlFor="member-age-group"
+          label="Zařazení"
+        >
+          <Select
+            id="member-age-group"
+            onChange={(event) =>
+              setAgeGroup(event.target.value as AgeGroup | "")
+            }
+            value={ageGroup}
+          >
+            <option value="">Nezařazeno</option>
+            {Object.entries(ageGroupLabels).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>

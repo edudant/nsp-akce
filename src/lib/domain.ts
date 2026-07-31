@@ -2,6 +2,7 @@ export type AppRole = "admin" | "member";
 export type AccessMode = "admin" | "member" | "shared";
 export type PairingRole = "leader" | "follower";
 export type ExperienceLevel = "beginner" | "advanced" | "experienced";
+export type AgeGroup = "young" | "old";
 export type EventType = "rehearsal" | "performance";
 export type EventStatus = "draft" | "open" | "closed" | "cancelled";
 export type AttendanceStatus =
@@ -35,6 +36,7 @@ export interface Member {
   experience: ExperienceLevel;
   /** False when a read-only payload intentionally omits the private level. */
   experienceKnown?: boolean;
+  ageGroup: AgeGroup | null;
   active: boolean;
   joinedAt: string;
   note?: string;
@@ -251,6 +253,15 @@ export const experienceLabels: Record<ExperienceLevel, string> = {
   advanced: "Pokročilý",
   experienced: "Zkušený",
 };
+
+export const ageGroupLabels: Record<AgeGroup, string> = {
+  young: "Mladí",
+  old: "Staří",
+};
+
+export function ageGroupLabel(ageGroup: AgeGroup | null): string {
+  return ageGroup ? ageGroupLabels[ageGroup] : "Nezařazeno";
+}
 
 export const eventTypeLabels: Record<EventType, string> = {
   rehearsal: "Zkouška",
