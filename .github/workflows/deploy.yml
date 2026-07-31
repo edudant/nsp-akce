@@ -59,6 +59,8 @@ jobs:
           done
           psql "$database_url" -X -q -v ON_ERROR_STOP=1 \
             -f supabase/tests/member_mvp_functional_test.sql >/dev/null
+          psql "$database_url" -X -q -v ON_ERROR_STOP=1 \
+            -f supabase/tests/member_profile_write_security_test.sql >/dev/null
 
       - name: Build
         env:

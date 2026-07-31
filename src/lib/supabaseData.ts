@@ -1552,35 +1552,34 @@ export const supabaseApi: AppApi = {
     if ("active" in patch) databasePatch.is_active = patch.active;
     if ("joinedAt" in patch) databasePatch.active_from = patch.joinedAt || null;
     if ("note" in patch) databasePatch.admin_note = patch.note ?? null;
-    const { data, error } = await requireSupabase()
-      .from("members")
-      .update(databasePatch)
-      .eq("id", memberId)
-      .select(
-        "id,display_name,short_name,pairing_role,experience_level,active_from,is_active,admin_note",
-      )
-      .single();
+    const { data, error } = await requireSupabase().rpc(
+      "save_member_profile",
+      {
+        target_member_id: memberId,
+        member_patch: databasePatch,
+      },
+    );
     if (error) throw error;
     return memberFromRow(data as MemberRow);
   },
 
   async addMember(input) {
     await requireAdmin();
-    const { data, error } = await requireSupabase()
-      .from("members")
-      .insert({
-        display_name: input.fullName,
-        short_name: input.shortName,
-        pairing_role: input.role === "leader" ? "lead" : "follow",
-        experience_level: input.experience,
-        is_active: input.active,
-        active_from: input.joinedAt || null,
-        admin_note: input.note ?? null,
-      })
-      .select(
-        "id,display_name,short_name,pairing_role,experience_level,active_from,is_active,admin_note",
-      )
-      .single();
+    const { data, error } = await requireSupabase().rpc(
+      "save_member_profile",
+      {
+        target_member_id: null,
+        member_patch: {
+          display_name: input.fullName,
+          short_name: input.shortName,
+          pairing_role: input.role === "leader" ? "lead" : "follow",
+          experience_level: input.experience,
+          is_active: input.active,
+          active_from: input.joinedAt || null,
+          admin_note: input.note ?? null,
+        },
+      },
+    );
     if (error) throw error;
     return memberFromRow(data as MemberRow);
   },

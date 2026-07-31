@@ -458,6 +458,30 @@ textarea {
   height: 14px;
 }
 
+.date-with-year-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(6.5rem, 0.32fr);
+  align-items: end;
+  gap: 10px;
+}
+
+.date-with-year-input > input,
+.date-with-year-input__year,
+.date-with-year-input__year input {
+  min-width: 0;
+}
+
+.date-with-year-input__year {
+  display: grid;
+  gap: 6px;
+}
+
+.date-with-year-input__year label {
+  color: var(--muted-strong);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
 .input-with-icon {
   position: relative;
 }

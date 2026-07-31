@@ -28,6 +28,7 @@ import {
   type ScoreRow,
 } from "../lib/domain";
 import { databaseQueryKey, useDatabase } from "../components/DataContext";
+import { DateWithYearInput } from "../components/DateWithYearInput";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataStates";
 import {
   formatDate,
@@ -580,11 +581,14 @@ function MemberForm({
           </Select>
         </Field>
       </div>
-      <Field htmlFor="member-joined" label="Členem od">
-        <input
+      <Field
+        hint="Rok můžete napsat rovnou, bez proklikávání kalendáře."
+        htmlFor="member-joined"
+        label="Členem od"
+      >
+        <DateWithYearInput
           id="member-joined"
-          onChange={(event) => setJoinedAt(event.target.value)}
-          type="date"
+          onChange={setJoinedAt}
           value={joinedAt}
         />
       </Field>
