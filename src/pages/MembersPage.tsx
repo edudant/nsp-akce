@@ -30,10 +30,7 @@ import {
   type PairingRole,
   type ScoreRow,
 } from "../lib/domain";
-import {
-  filterMembers,
-  type MemberAgeGroupFilter,
-} from "../lib/memberFilters";
+import { filterMembers, type MemberAgeGroupFilter } from "../lib/memberFilters";
 import { databaseQueryKey, useDatabase } from "../components/DataContext";
 import { DateWithYearInput } from "../components/DateWithYearInput";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataStates";
@@ -55,6 +52,10 @@ import {
   Select,
   Toggle,
 } from "../components/Ui";
+
+import { Help } from "../components/Help";
+import { MemberLoginCode } from "../components/MemberLoginCode";
+import { memberGroups } from "../lib/ensembleRules";
 
 interface MemberEditorInput {
   profile: Omit<Member, "id" | "account">;
@@ -115,9 +116,7 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
     mutationFn: appApi.sendMemberInvitation,
     onSuccess: async (account) => {
       setEditing((current) =>
-        current !== null &&
-        current !== "new" &&
-        current.id === account.memberId
+        current !== null && current !== "new" && current.id === account.memberId
           ? { ...current, account }
           : current,
       );
@@ -203,26 +202,38 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
           <span>
             <small>Tanečníci / tanečnice</small>
             <strong>
-              {activeMembers.filter((member) => member.role === "leader").length}
+              {
+                activeMembers.filter((member) => member.role === "leader")
+                  .length
+              }
               {" / "}
-              {activeMembers.filter((member) => member.role === "follower").length}
+              {
+                activeMembers.filter((member) => member.role === "follower")
+                  .length
+              }
             </strong>
           </span>
         </Card>
-        <Card>
-          <span className="member-stat-icon member-stat-icon--amber">
-            <ShieldCheck aria-hidden="true" />
-          </span>
-          <span>
-            <small>Začátečníci</small>
-            <strong>{beginners}</strong>
-          </span>
-        </Card>
+        {canEdit && (
+          <Card>
+            <span className="member-stat-icon member-stat-icon--amber">
+              <ShieldCheck aria-hidden="true" />
+            </span>
+            <span>
+              <small>Začátečníci</small>
+              <strong>{beginners}</strong>
+            </span>
+          </Card>
+        )}
       </section>
 
       <Card className="members-card">
         <header className="members-card__header">
-          <div className="filter-tabs" role="tablist" aria-label="Stav členství">
+          <div
+            className="filter-tabs"
+            role="tablist"
+            aria-label="Stav členství"
+          >
             {(
               [
                 ["active", "Aktivní"],
@@ -288,7 +299,7 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
                 <tr>
                   <th scope="col">Člen</th>
                   <th scope="col">Párovací role</th>
-                  <th scope="col">Zkušenost</th>
+                  {canEdit && <th scope="col">Zkušenost</th>}
                   <th scope="col">Zařazení</th>
                   <th scope="col">Členem od</th>
                   <th scope="col">Stav</th>
@@ -333,14 +344,30 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
                       </div>
                     </td>
                     <td data-label="Role">{roleLabels[member.role]}</td>
-                    <td data-label="Zkušenost">
-                      <ExperienceBadge level={member.experience} />
-                    </td>
+                    {canEdit && (
+                      <td data-label="Zkušenost">
+                        {member.experienceKnown !== false ? (
+                          <ExperienceBadge level={member.experience} />
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    )}
                     <td data-label="Zařazení">
-                      <MemberAgeGroupBadge ageGroup={member.ageGroup} />
+                      {memberGroups(member).map((group) => (
+                        <span key={group}>
+                          <MemberAgeGroupBadge ageGroup={group} />
+                          {memberGroups(member).length > 1 &&
+                          group === member.ageGroup
+                            ? " ★"
+                            : ""}
+                        </span>
+                      ))}
                     </td>
                     <td data-label="Členem od">
-                      {formatDate(member.joinedAt, "MMMM yyyy")}
+                      {member.joinedAt
+                        ? formatDate(member.joinedAt, "MMMM yyyy")
+                        : "—"}
                     </td>
                     <td data-label="Stav">
                       <Badge tone={member.active ? "green" : "neutral"}>
@@ -400,16 +427,10 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function MemberAgeGroupBadge({
-  ageGroup,
-}: {
-  ageGroup: AgeGroup | null;
-}) {
+function MemberAgeGroupBadge({ ageGroup }: { ageGroup: AgeGroup | null }) {
   const tone =
     ageGroup === "young" ? "blue" : ageGroup === "old" ? "purple" : "neutral";
-  return (
-    <Badge tone={tone}>{ageGroupLabel(ageGroup)}</Badge>
-  );
+  return <Badge tone={tone}>{ageGroupLabel(ageGroup)}</Badge>;
 }
 
 function MemberAccountStatus({ member }: { member: Member }) {
@@ -530,9 +551,10 @@ function MemberForm({
   const [ageGroup, setAgeGroup] = useState<AgeGroup | "">(
     member?.ageGroup ?? "",
   );
-  const [joinedAt, setJoinedAt] = useState(
-    member?.joinedAt ?? todayInPrague(),
+  const [ageGroups, setAgeGroups] = useState<AgeGroup[]>(
+    member ? memberGroups(member) : [],
   );
+  const [joinedAt, setJoinedAt] = useState(member?.joinedAt ?? todayInPrague());
   const [active, setActive] = useState(member?.active ?? true);
   const [note, setNote] = useState(member?.note ?? "");
   const [email, setEmail] = useState(member?.account?.email ?? "");
@@ -549,6 +571,7 @@ function MemberForm({
         role,
         experience,
         ageGroup: ageGroup || null,
+        ageGroups,
         joinedAt,
         active,
         note: note || undefined,
@@ -616,9 +639,9 @@ function MemberForm({
           </Select>
         </Field>
         <Field
-          hint="Slouží pro přehled a filtrování; neovlivňuje párování."
+          hint="Při obou zařazeních vyberte prioritní skupinu."
           htmlFor="member-age-group"
-          label="Zařazení"
+          label="Prioritní zařazení"
         >
           <Select
             id="member-age-group"
@@ -627,15 +650,45 @@ function MemberForm({
             }
             value={ageGroup}
           >
-            <option value="">Nezařazeno</option>
-            {Object.entries(ageGroupLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
+            <option value="" disabled={ageGroups.length > 0}>
+              Nezařazeno
+            </option>
+            {Object.entries(ageGroupLabels)
+              .filter(([value]) => ageGroups.includes(value as AgeGroup))
+              .map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
           </Select>
         </Field>
       </div>
+      <div className="form-grid">
+        {Object.entries(ageGroupLabels).map(([group, label]) => (
+          <label key={group}>
+            <input
+              type="checkbox"
+              checked={ageGroups.includes(group as AgeGroup)}
+              onChange={(event) => {
+                const next = event.target.checked
+                  ? [...ageGroups, group as AgeGroup]
+                  : ageGroups.filter((value) => value !== group);
+                setAgeGroups(next);
+                if (!next.includes(ageGroup as AgeGroup))
+                  setAgeGroup(next[0] ?? "");
+              }}
+            />{" "}
+            {label}
+          </label>
+        ))}
+      </div>
+      <Help title="Zařazení a soukromé hodnocení">
+        <p>
+          Člen může patřit do obou skupin, jedna je prioritní. Do Mladých lze
+          doplnit jen členy s tímto zařazením. Hvězdička označuje prioritu.
+          Zkušenost a interní poznámku vidí pouze admin.
+        </p>
+      </Help>
       <Field
         hint="Rok můžete napsat rovnou, bez proklikávání kalendáře."
         htmlFor="member-joined"
@@ -749,6 +802,12 @@ function MemberForm({
       </section>
 
       {member ? (
+        <MemberLoginCode
+          memberId={member.id}
+          disabled={!savedEmail || emailChanged || !member.active}
+        />
+      ) : null}
+      {member ? (
         <>
           <MemberScoreSummary score={score} />
           <MemberHistory
@@ -859,9 +918,7 @@ function MemberHistory({
           Načítám historii…
         </p>
       ) : error ? (
-        <p className="form-error">
-          Historii se nepodařilo načíst. {error}
-        </p>
+        <p className="form-error">Historii se nepodařilo načíst. {error}</p>
       ) : orderedHistory.length ? (
         <div className="member-admin-history__list">
           {orderedHistory.map((entry) => (

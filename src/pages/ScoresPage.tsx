@@ -8,8 +8,11 @@ import {
   TrendingUp,
   UserCheck,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { appApi } from "../lib/dataApi";
+import { ScoringHelp } from "../components/Help";
 import { useMemo, useState } from "react";
-import { calculateScores, roleLabels, type PairingRole } from "../lib/domain";
+import { roleLabels, type PairingRole } from "../lib/domain";
 import { useDatabase } from "../components/DataContext";
 import { ErrorState, LoadingState } from "../components/DataStates";
 import { formatPoints } from "../components/formatters";
@@ -27,6 +30,36 @@ type SortKey = "total" | "name" | "rate";
 
 export function ScoresPage() {
   const database = useDatabase();
+  const [period, setPeriod] = useState("active");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const activeSeason = database.data?.seasons?.find(
+    (s) => s.active && s.kind === "dance",
+  );
+  const seasonId =
+    period === "active"
+      ? activeSeason?.id
+      : period === "custom"
+        ? undefined
+        : period;
+  const scoreQuery = useQuery({
+    queryKey: ["scores", seasonId, period, from, to],
+    queryFn: () =>
+      appApi.getScores(
+        period === "custom"
+          ? { dateFrom: from || undefined, dateTo: to || undefined }
+          : { seasonId },
+      ),
+    enabled: Boolean(database.data && (period === "custom" || seasonId)),
+  });
+  const periodRows = useMemo(
+    () =>
+      scoreQuery.data ??
+      (period === "active" && activeSeason
+        ? (database.data?.scoreRows ?? [])
+        : []),
+    [scoreQuery.data, period, activeSeason, database.data?.scoreRows],
+  );
   const [search, setSearch] = useState("");
   const [role, setRole] = useState<"all" | PairingRole>("all");
   const [sort, setSort] = useState<SortKey>("total");
@@ -34,26 +67,31 @@ export function ScoresPage() {
   const scores = useMemo(() => {
     if (!database.data) return [];
     const term = search.trim().toLocaleLowerCase("cs");
-    return calculateScores(database.data)
+    return periodRows
       .filter((row) => role === "all" || row.member.role === role)
       .filter((row) =>
         row.member.fullName.toLocaleLowerCase("cs").includes(term),
       )
       .sort((first, second) => {
         if (sort === "name") {
-          return first.member.fullName.localeCompare(second.member.fullName, "cs");
+          return first.member.fullName.localeCompare(
+            second.member.fullName,
+            "cs",
+          );
         }
-        if (sort === "rate") return second.attendanceRate - first.attendanceRate;
+        if (sort === "rate")
+          return second.attendanceRate - first.attendanceRate;
         return second.total - first.total;
       });
-  }, [database.data, role, search, sort]);
+  }, [database.data, periodRows, role, search, sort]);
 
-  if (database.isLoading) return <LoadingState label="Počítám bodový přehled…" />;
+  if (database.isLoading)
+    return <LoadingState label="Počítám bodový přehled…" />;
   if (database.isError || !database.data) {
     return <ErrorState onRetry={() => void database.refetch()} />;
   }
 
-  const allScores = calculateScores(database.data);
+  const allScores = periodRows;
   const average =
     allScores.reduce((sum, row) => sum + row.total, 0) /
     Math.max(1, allScores.length);
@@ -94,7 +132,7 @@ export function ScoresPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "body-letni-sezona-2026.csv";
+    link.download = "body-prehled.csv";
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -109,10 +147,60 @@ export function ScoresPage() {
           </Button>
         }
         description="Transparentní podklad pro výběr na vystoupení. Body nejsou automatický nárok na účast."
-        eyebrow="Letní sezona 2026"
+        eyebrow={
+          period === "custom"
+            ? "Vlastní období"
+            : (database.data.seasons?.find((s) => s.id === seasonId)?.name ??
+              "Vyberte sezónu")
+        }
         title="Bodový přehled"
       />
 
+      <div className="feature-toolbar">
+        <Select
+          aria-label="Období bodů"
+          value={period}
+          onChange={(e) => setPeriod(e.target.value)}
+        >
+          <option value="active">Aktivní taneční sezóna</option>
+          {database.data.seasons?.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name} · {s.kind === "carols" ? "Koledy" : "Taneční"}
+            </option>
+          ))}
+          <option value="custom">Vlastní období</option>
+        </Select>
+        {period === "custom" && (
+          <>
+            <label>
+              Od{" "}
+              <input
+                aria-label="Body od"
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+              />
+            </label>
+            <label>
+              Do{" "}
+              <input
+                aria-label="Body do"
+                type="date"
+                min={from}
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+              />
+            </label>
+          </>
+        )}
+      </div>
+      <ScoringHelp />
+      {scoreQuery.isFetching && <p role="status">Počítám body…</p>}
+      {scoreQuery.error && (
+        <p role="alert" className="form-error">
+          {scoreQuery.error.message}
+        </p>
+      )}
       <section className="score-stats">
         <Card className="score-stat score-stat--featured">
           <span className="score-stat__icon">
@@ -155,7 +243,7 @@ export function ScoresPage() {
           <div>
             <span className="eyebrow">Pořadí členů</span>
             <h2>Body za docházku</h2>
-            <p>Aktualizováno dnes v 11:45</p>
+            <p>Body za zvolené období</p>
           </div>
           <div className="score-filters">
             <label className="search-field">
@@ -209,7 +297,9 @@ export function ScoresPage() {
                   <td>
                     <span
                       className={`rank ${
-                        index < 3 && sort === "total" ? `rank--${index + 1}` : ""
+                        index < 3 && sort === "total"
+                          ? `rank--${index + 1}`
+                          : ""
                       }`}
                     >
                       {index + 1}
@@ -255,7 +345,9 @@ export function ScoresPage() {
                     </div>
                   </td>
                   <td data-label="Celkem">
-                    <span className="total-score">{formatPoints(row.total)}</span>
+                    <span className="total-score">
+                      {formatPoints(row.total)}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -273,8 +365,8 @@ export function ScoresPage() {
           <strong>Jak se body počítají?</strong>
           <p>
             Celá účast získá plnou váhu události. U částečné účasti se body
-            přepočítají podle odchozených minut. Omluvená absence má 0 bodů, ale
-            v přehledu ji odlišujeme.
+            přepočítají podle procenta účasti zadaného adminem. Omluvená absence
+            má 0 bodů, ale v přehledu ji odlišujeme.
           </p>
         </div>
         <span>

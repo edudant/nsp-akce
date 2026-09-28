@@ -4,19 +4,11 @@ export type PairingRole = "leader" | "follower";
 export type ExperienceLevel = "beginner" | "advanced" | "experienced";
 export type AgeGroup = "young" | "old";
 export type EventType = "rehearsal" | "performance";
-export type EventStatus = "draft" | "open" | "closed" | "cancelled";
+export type EventStatus =
+  "draft" | "open" | "confirmed" | "closed" | "cancelled";
 export type AttendanceStatus =
-  | "present"
-  | "partial"
-  | "absent"
-  | "excused"
-  | "unknown";
-export type InterestStatus =
-  | "yes"
-  | "no"
-  | "maybe"
-  | "substitute"
-  | "unset";
+  "present" | "partial" | "absent" | "excused" | "unknown";
+export type InterestStatus = "yes" | "no" | "maybe" | "substitute" | "unset";
 
 export interface MemberAccount {
   memberId: string;
@@ -37,6 +29,7 @@ export interface Member {
   /** False when a read-only payload intentionally omits the private level. */
   experienceKnown?: boolean;
   ageGroup: AgeGroup | null;
+  ageGroups?: AgeGroup[];
   active: boolean;
   joinedAt: string;
   note?: string;
@@ -47,6 +40,9 @@ export interface AttendanceRecord {
   memberId: string;
   status: AttendanceStatus;
   attendedMinutes?: number;
+  attendancePercent?: number;
+  standing?: boolean;
+  actualStanding?: boolean;
   /** Server-calculated value used by restricted views that cannot see weights. */
   earnedPoints?: number;
   interest: InterestStatus;
@@ -97,6 +93,45 @@ export interface DancePair {
   locked?: boolean;
   reason?: string;
   actual?: boolean;
+  ageGroup?: AgeGroup;
+  belowLine?: boolean;
+}
+
+export interface Season {
+  id: string;
+  name: string;
+  kind: "dance" | "carols";
+  dateFrom: string;
+  dateTo: string;
+  active: boolean;
+}
+export interface SongCategory {
+  id: string;
+  name: string;
+}
+export interface Song {
+  id: string;
+  name: string;
+  categoryId?: string;
+  active: boolean;
+}
+export interface SongSeries {
+  id: string;
+  name: string;
+  songIds: string[];
+  confirmed: boolean;
+}
+export interface PairSet {
+  id: string;
+  name: string;
+  createdAt: string;
+  pairs: DancePair[];
+  published: boolean;
+}
+export interface ScoreFilter {
+  seasonId?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export interface EnsembleEvent {
@@ -117,6 +152,7 @@ export interface EnsembleEvent {
   responseDeadline?: string;
   /** Authoritative response availability calculated by the backend. */
   canRespond?: boolean;
+  partnerOptions?: string[];
   /** Describes whether attendance contains the whole roster, only the viewer, or no roster. */
   attendanceScope?: "all" | "self" | "none";
   /** False when a shared payload deliberately omits weight and capacity. */
@@ -124,6 +160,14 @@ export interface EnsembleEvent {
   attendance: AttendanceRecord[];
   pairs: DancePair[];
   pairsPublished: boolean;
+  seasonId?: string;
+  seasonKind?: Season["kind"];
+  oldPairs?: number;
+  youngPairs?: number;
+  singing?: boolean;
+  songSeries?: SongSeries[];
+  pairSets?: PairSet[];
+  actualPairs?: DancePair[];
 }
 
 export interface PairPreference {
@@ -133,6 +177,8 @@ export interface PairPreference {
   kind: "forbidden" | "discouraged" | "preferred";
   strength?: number;
   privateReason?: string;
+  validFrom?: string;
+  validTo?: string;
 }
 
 export interface PartnerWish {
@@ -180,6 +226,9 @@ export interface AppDatabase {
   myHistory?: MemberHistoryEntry[];
   accessMode: AccessMode;
   updatedAt: string;
+  seasons?: Season[];
+  songs?: Song[];
+  songCategories?: SongCategory[];
 }
 
 export interface SessionUser {
@@ -204,6 +253,7 @@ export interface AppApi {
   updateMyResponse(
     eventId: string,
     response: InterestStatus,
+    note?: string,
   ): Promise<EnsembleEvent>;
   updateAllAttendance(
     eventId: string,
@@ -241,6 +291,26 @@ export interface AppApi {
   saveProgramCatalogItem(
     item: Omit<ProgramCatalogItem, "id"> & { id?: string },
   ): Promise<ProgramCatalogItem>;
+  setPartnerWishes(
+    eventId: string,
+    memberId: string,
+    partnerIds: string[],
+  ): Promise<void>;
+  saveSeason(input: Omit<Season, "id"> & { id?: string }): Promise<void>;
+  getScores(filter: ScoreFilter): Promise<ScoreRow[]>;
+  saveSong(input: Omit<Song, "id"> & { id?: string }): Promise<void>;
+  saveSongCategory(
+    input: Omit<SongCategory, "id"> & { id?: string },
+  ): Promise<void>;
+  saveSongSeries(
+    eventId: string,
+    series: Omit<SongSeries, "id"> & { id?: string },
+  ): Promise<void>;
+  deleteSongSeries(eventId: string, seriesId: string): Promise<void>;
+  updateEvent(eventId: string, patch: Partial<EnsembleEvent>): Promise<void>;
+  generateMemberLoginCode(
+    memberId: string,
+  ): Promise<{ code: string; email: string }>;
 }
 
 export const roleLabels: Record<PairingRole, string> = {
@@ -255,8 +325,8 @@ export const experienceLabels: Record<ExperienceLevel, string> = {
 };
 
 export const ageGroupLabels: Record<AgeGroup, string> = {
-  young: "Mladí",
-  old: "Staří",
+  young: "Mladý",
+  old: "Starý",
 };
 
 export function ageGroupLabel(ageGroup: AgeGroup | null): string {
@@ -271,6 +341,7 @@ export const eventTypeLabels: Record<EventType, string> = {
 export const eventStatusLabels: Record<EventStatus, string> = {
   draft: "Návrh",
   open: "Otevřená",
+  confirmed: "Potvrzená",
   closed: "Uzavřená",
   cancelled: "Zrušená",
 };
@@ -292,7 +363,9 @@ export const interestLabels: Record<InterestStatus, string> = {
 };
 
 export function getEventDurationMinutes(event: EnsembleEvent): number {
-  const [startHour = 0, startMinute = 0] = event.startTime.split(":").map(Number);
+  const [startHour = 0, startMinute = 0] = event.startTime
+    .split(":")
+    .map(Number);
   const [endHour = 0, endMinute = 0] = event.endTime.split(":").map(Number);
   return Math.max(1, endHour * 60 + endMinute - startHour * 60 - startMinute);
 }
@@ -304,6 +377,11 @@ export function getAttendancePoints(
   if (event.status === "cancelled") return 0;
   if (record.status === "present") return event.weight;
   if (record.status === "partial") {
+    if (record.attendancePercent != null)
+      return (
+        (event.weight * Math.min(100, Math.max(0, record.attendancePercent))) /
+        100
+      );
     const proportion =
       (record.attendedMinutes ?? 0) / getEventDurationMinutes(event);
     return event.weight * Math.min(1, Math.max(0, proportion));
@@ -318,7 +396,15 @@ export function calculateScores(database: AppDatabase): ScoreRow[] {
     );
   }
   const scoredEvents = database.events.filter(
-    (event) => event.status === "closed",
+    (event) =>
+      event.status === "closed" &&
+      (!database.seasons?.some(
+        (season) => season.active && season.kind === "dance",
+      ) ||
+        event.seasonId ===
+          database.seasons.find(
+            (season) => season.active && season.kind === "dance",
+          )?.id),
   );
 
   return database.members

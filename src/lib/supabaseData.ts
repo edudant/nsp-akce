@@ -438,7 +438,7 @@ function localTime(iso: string): string {
   }).format(new Date(iso));
 }
 
-function pragueLocalToIso(date: string, time: string): string {
+export function pragueLocalToIso(date: string, time: string): string {
   const approximation = new Date(`${date}T${time}:00Z`);
   const offsetName = new Intl.DateTimeFormat("en", {
     timeZone: "Europe/Prague",
@@ -1219,7 +1219,7 @@ async function cleanupPairingRun(runId: string): Promise<void> {
   await requireSupabase().from("pairing_runs").delete().eq("id", runId);
 }
 
-export const supabaseApi: AppApi = {
+export const supabaseApi: Omit<AppApi, "setPartnerWishes" | "saveSeason" | "getScores" | "saveSong" | "saveSongCategory" | "saveSongSeries" | "deleteSongSeries" | "updateEvent" | "generateMemberLoginCode"> = {
   getDatabase,
 
   async getMembers() {

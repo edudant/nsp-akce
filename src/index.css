@@ -6853,3 +6853,30 @@ tbody tr:hover {
     min-height: 44px;
   }
 }
+
+/* Sezóny, účast, série a kontextová nápověda. */
+.feature-card { padding: 1.5rem; margin: 1rem 0; }
+.feature-card h2 { margin-top: 0; }
+.feature-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; margin: 1rem 0; }
+.feature-toolbar > input { flex: 1; min-width: 10rem; }
+.feature-list { display: grid; gap: .65rem; margin: 1rem 0; }
+.feature-list > div { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .65rem; padding: .7rem; border-bottom: 1px solid var(--border, #ddd); }
+.feature-list small { display: block; color: var(--text-muted, #666); }
+.context-help { margin: .9rem 0; padding: .8rem 1rem; border-radius: .7rem; background: var(--surface-soft, #f6f4f0); }
+.context-help summary { cursor: pointer; font-weight: 600; }
+.context-help summary:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.context-help p { margin: .7rem 0; line-height: 1.6; }
+.standing-picker { display: flex; flex-wrap: wrap; gap: .7rem; margin: 1rem 0; }
+.standing-picker label { display: inline-flex; align-items: center; gap: .5rem; }
+.standing-picker input[type=checkbox], .song-series input[type=checkbox], .dialog-form input[type=checkbox] { width: 1.1rem; min-height: 1.1rem; height: 1.1rem; flex: 0 0 auto; }
+.tuning-sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin: 1rem 0; }
+.tuning-sliders label { display: grid; gap: .5rem; }
+.tuning-sliders input { width: 100%; }
+.song-series { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border,#ddd); border-radius: .7rem; }
+.song-series li { padding: .4rem; }
+.song-actions { display: inline-flex; gap: .3rem; }
+.song-picker { max-height: 18rem; overflow-y: auto; display: flex; flex-wrap: wrap; gap: .35rem; margin: 1rem 0; }
+.login-code { font-size: 1.5rem; letter-spacing: .2em; }
+.pair-edit-row .select-wrap { flex: 1; min-width: 130px; }
+.attendance-entry input[type=number] { max-width: 6rem; }
+@media (max-width: 600px) { .feature-card { padding: 1rem; } .feature-toolbar > * { max-width: 100%; } .attendance-entry > span { flex-basis: 100%; } }

@@ -1,4 +1,3 @@
-import type { AppApi } from "./domain";
-import { supabaseApi } from "./supabaseData";
+import { appApiV3 } from "./appApiV3";
 
-export const appApi: AppApi = supabaseApi;
+export const appApi = appApiV3;

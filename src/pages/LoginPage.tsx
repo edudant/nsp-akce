@@ -12,10 +12,7 @@ import {
 import { type FormEvent, useEffect, useState } from "react";
 import { BrandMark } from "../components/BrandMark";
 import { Button, Field } from "../components/Ui";
-import {
-  EMAIL_RESEND_SECONDS,
-  getEmailAuthErrorMessage,
-} from "../lib/auth";
+import { EMAIL_RESEND_SECONDS, getEmailAuthErrorMessage } from "../lib/auth";
 
 export interface LoginPageProps {
   onEmailLogin: (email: string) => Promise<void>;
@@ -29,9 +26,7 @@ export function LoginPage({
   onSharedCodeLogin,
 }: LoginPageProps) {
   const [mode, setMode] = useState<"email" | "shared">("email");
-  const [emailStep, setEmailStep] = useState<"request" | "verify">(
-    "request",
-  );
+  const [emailStep, setEmailStep] = useState<"request" | "verify">("request");
   const [email, setEmail] = useState("");
   const [sentEmail, setSentEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -164,7 +159,9 @@ export function LoginPage({
           </div>
 
           <div className="login-story__headline">
-            <span className="eyebrow eyebrow--light">Co je nového v souboru</span>
+            <span className="eyebrow eyebrow--light">
+              Co je nového v souboru
+            </span>
             <h1>Akce, účast i taneční páry pěkně pohromadě.</h1>
             <p>
               Mrkněte, co se chystá a kdo kde bude. Aplikace pomůže poskládat
@@ -213,7 +210,11 @@ export function LoginPage({
             <p>Přihlaste se e-mailem nebo společným kódem souboru.</p>
           </div>
 
-          <div className="auth-tabs" role="tablist" aria-label="Způsob přihlášení">
+          <div
+            className="auth-tabs"
+            role="tablist"
+            aria-label="Způsob přihlášení"
+          >
             <button
               aria-selected={mode === "email"}
               className={mode === "email" ? "is-active" : ""}
@@ -267,6 +268,24 @@ export function LoginPage({
                   Poslat odkaz a kód
                   <ArrowRight aria-hidden="true" />
                 </Button>
+                <Button
+                  disabled={loading}
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    const address = email.trim().toLowerCase();
+                    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+                      setError("Zadejte platnou e-mailovou adresu.");
+                      return;
+                    }
+                    setError("");
+                    setSentEmail(address);
+                    setEmailStep("verify");
+                    setMessage("Zadejte kód z e-mailu nebo od administrátora.");
+                  }}
+                >
+                  Mám přihlašovací kód
+                </Button>
                 <p className="auth-help">
                   Zpráva obsahuje magic link i šestimístný kód. Můžete použít
                   jednodušší variantu.
@@ -275,7 +294,7 @@ export function LoginPage({
             ) : mode === "email" ? (
               <div className="email-login-step">
                 <div className="email-login-step__address">
-                  <span>Kód jsme poslali na</span>
+                  <span>Přihlášení pro</span>
                   <strong>{sentEmail}</strong>
                 </div>
                 <Field
@@ -293,7 +312,9 @@ export function LoginPage({
                       inputMode="numeric"
                       maxLength={6}
                       onChange={(event) =>
-                        setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
+                        setOtp(
+                          event.target.value.replace(/\D/g, "").slice(0, 6),
+                        )
                       }
                       pattern="[0-9]{6}"
                       placeholder="000000"
@@ -307,8 +328,8 @@ export function LoginPage({
                   <ArrowRight aria-hidden="true" />
                 </Button>
                 <p className="auth-help">
-                  Můžete také otevřít tlačítko v e-mailu. Když se odkaz otevře
-                  v okně pošty, vraťte se sem a opište kód.
+                  Můžete také otevřít tlačítko v e-mailu. Když se odkaz otevře v
+                  okně pošty, vraťte se sem a opište kód.
                 </p>
                 <div className="email-login-actions">
                   <Button

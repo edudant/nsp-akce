@@ -42,6 +42,7 @@ export function Button({
     <button
       className={`button button--${variant} button--${size} ${className}`}
       disabled={disabled || loading}
+      type="button"
       {...props}
     >
       {loading ? <LoaderCircle aria-hidden="true" className="spin" /> : null}
@@ -127,6 +128,7 @@ export function EventStatusBadge({ status }: { status: EventStatus }) {
   const tones: Record<EventStatus, BadgeTone> = {
     draft: "neutral",
     open: "blue",
+    confirmed: "purple",
     closed: "green",
     cancelled: "red",
   };
@@ -313,4 +315,3 @@ export function Card({
     </section>
   );
 }
-

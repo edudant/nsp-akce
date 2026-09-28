@@ -45,11 +45,11 @@ export function filterMembers(
     .filter((member) => {
       if (filters.ageGroup === "all") return true;
       if (filters.ageGroup === "unassigned") return member.ageGroup === null;
-      return member.ageGroup === filters.ageGroup;
+      return (member.ageGroups ?? (member.ageGroup ? [member.ageGroup] : [])).includes(filters.ageGroup);
     })
     .filter((member) => {
       const haystack = normalizeMemberSearch(
-        `${member.fullName} ${member.shortName} ${ageGroupSearchTerms(member.ageGroup)}`,
+        `${member.fullName} ${member.shortName} ${(member.ageGroups ?? [member.ageGroup]).map(ageGroupSearchTerms).join(" ")}`,
       );
       return searchTerms.every((term) => haystack.includes(term));
     })

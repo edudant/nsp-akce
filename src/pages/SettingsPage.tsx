@@ -17,10 +17,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useState } from "react";
-import {
-  type ProgramCatalogItem,
-  type SessionUser,
-} from "../lib/domain";
+import { type ProgramCatalogItem, type SessionUser } from "../lib/domain";
 import { appApi } from "../lib/dataApi";
 import { rotateSharedAccessCode } from "../lib/settingsApi";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -30,19 +27,17 @@ import { formatDate } from "../components/formatters";
 import { PageHeader } from "../components/PageHeader";
 import { Badge, Button, Card, Field, Select, Toggle } from "../components/Ui";
 
+import { SeasonsPanel, SongsSettings } from "../components/FeatureSettings";
+
 type SettingsSection =
-  | "season"
-  | "scoring"
-  | "pairing"
-  | "programs"
-  | "access"
-  | "data";
+  "songs" | "season" | "scoring" | "pairing" | "programs" | "access" | "data";
 
 const sections: Array<{
   id: SettingsSection;
   label: string;
   icon: typeof Settings2;
 }> = [
+  { id: "songs", label: "Písně a kategorie", icon: ListMusic },
   { id: "season", label: "Sezona a události", icon: Settings2 },
   { id: "scoring", label: "Bodování", icon: Calculator },
   { id: "pairing", label: "Pravidla párování", icon: Sparkles },
@@ -85,7 +80,11 @@ export function SettingsPage({
   };
   const availableSections = sections.filter(
     (item) =>
-      item.id === "programs" || item.id === "access" || item.id === "data",
+      item.id === "season" ||
+      item.id === "songs" ||
+      item.id === "programs" ||
+      item.id === "access" ||
+      item.id === "data",
   );
 
   return (
@@ -109,7 +108,10 @@ export function SettingsPage({
           <LockKeyhole aria-hidden="true" />
           <div>
             <strong>Nastavení je pouze pro správce</strong>
-            <p>V členském náhledu můžete zkontrolovat aktuální pravidla, ne je měnit.</p>
+            <p>
+              V členském náhledu můžete zkontrolovat aktuální pravidla, ne je
+              měnit.
+            </p>
           </div>
         </div>
       ) : null}
@@ -134,6 +136,7 @@ export function SettingsPage({
         </Card>
 
         <div className="settings-content">
+          {section === "songs" ? <SongsSettings canEdit={canEdit} /> : null}
           {section === "season" ? (
             <SeasonSettings canEdit={canEdit} onSave={confirmSaved} />
           ) : null}
@@ -216,58 +219,8 @@ function SettingsFooter({
   );
 }
 
-function SeasonSettings({
-  canEdit,
-  onSave,
-}: {
-  canEdit: boolean;
-  onSave: () => void;
-}) {
-  return (
-    <SettingsCard
-      description="Aktivní období se nabízí ve filtrech a používá pro součty bodů."
-      eyebrow="Sezona"
-      title="Letní sezona 2026"
-    >
-      <div className="form-grid">
-        <Field htmlFor="season-name" label="Název sezony">
-          <input disabled={!canEdit} defaultValue="Léto 2026" id="season-name" />
-        </Field>
-        <Field htmlFor="season-status" label="Stav">
-          <Select disabled={!canEdit} id="season-status" defaultValue="active">
-            <option value="active">Aktivní</option>
-            <option value="closed">Uzavřená</option>
-          </Select>
-        </Field>
-      </div>
-      <div className="form-grid">
-        <Field htmlFor="season-from" label="Začátek">
-          <input
-            defaultValue="2026-05-01"
-            disabled={!canEdit}
-            id="season-from"
-            type="date"
-          />
-        </Field>
-        <Field htmlFor="season-to" label="Konec">
-          <input
-            defaultValue="2026-09-30"
-            disabled={!canEdit}
-            id="season-to"
-            type="date"
-          />
-        </Field>
-      </div>
-      <Toggle
-        checked
-        disabled={!canEdit}
-        description="Nové události se automaticky přiřadí do tohoto období."
-        label="Nastavit jako výchozí sezonu"
-        onChange={() => undefined}
-      />
-      <SettingsFooter disabled={!canEdit} onSave={onSave} />
-    </SettingsCard>
-  );
+function SeasonSettings({ canEdit }: { canEdit: boolean; onSave: () => void }) {
+  return <SeasonsPanel canEdit={canEdit} />;
 }
 
 function ScoringSettings({
@@ -299,7 +252,11 @@ function ScoringSettings({
           <strong>Vystoupení</strong>
           <small>Výchozí hodnota při založení vystoupení</small>
         </span>
-        <Select defaultValue="2" disabled={!canEdit} aria-label="Váha vystoupení">
+        <Select
+          defaultValue="2"
+          disabled={!canEdit}
+          aria-label="Váha vystoupení"
+        >
           <option value="1">1 bod</option>
           <option value="1.5">1,5 bodu</option>
           <option value="2">2 body</option>
@@ -356,7 +313,11 @@ function PairingSettings({
           <strong>Období historie</strong>
           <small>Jak daleko zpět se počítají společné tance</small>
         </span>
-        <Select defaultValue="365" disabled={!canEdit} aria-label="Období historie">
+        <Select
+          defaultValue="365"
+          disabled={!canEdit}
+          aria-label="Období historie"
+        >
           <option value="180">6 měsíců</option>
           <option value="365">12 měsíců</option>
           <option value="730">24 měsíců</option>
@@ -567,7 +528,11 @@ function AccessSettings({
             onClick={() => onCodeVisible(!codeVisible)}
             type="button"
           >
-            {codeVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+            {codeVisible ? (
+              <EyeOff aria-hidden="true" />
+            ) : (
+              <Eye aria-hidden="true" />
+            )}
           </button>
           <button
             aria-label="Kopírovat kód"
@@ -575,7 +540,11 @@ function AccessSettings({
             onClick={() => void copyCode()}
             type="button"
           >
-            {copied ? <Check aria-hidden="true" /> : <Clipboard aria-hidden="true" />}
+            {copied ? (
+              <Check aria-hidden="true" />
+            ) : (
+              <Clipboard aria-hidden="true" />
+            )}
           </button>
         </div>
         <div className="shared-code-actions">
@@ -646,7 +615,9 @@ function DataSettings({
             <Archive aria-hidden="true" />
             <span>
               <strong>Pravidelný export</strong>
-              <small>Schéma je verzované v repozitáři; data jsou uložená v Supabase.</small>
+              <small>
+                Schéma je verzované v repozitáři; data jsou uložená v Supabase.
+              </small>
             </span>
           </span>
           <Badge tone="blue">Připraveno</Badge>

@@ -1,3 +1,5 @@
+-- Historical v2 contract; replaced for v3 by scripts/test-feature-integration.mjs.
+-- See docs/IMPLEMENTACE_A_TESTY_2026_09.md before running against the new schema.
 -- Transactional functional test for member accounts, member-owned data and
 -- legacy pairing compatibility. All fixtures use reserved example.invalid
 -- addresses, and ROLLBACK leaves the target database unchanged.

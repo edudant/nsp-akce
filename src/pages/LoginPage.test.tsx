@@ -28,6 +28,27 @@ describe("LoginPage", () => {
     vi.useRealTimers();
   });
 
+  it("accepts an admin supplied code without requesting a new email", async () => {
+    const props = renderLogin();
+    fireEvent.change(screen.getByLabelText("E-mailová adresa"), {
+      target: { value: "clen@example.cz" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mám přihlašovací kód" }),
+    );
+    fireEvent.change(screen.getByLabelText("Kód z e-mailu"), {
+      target: { value: "123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ověřit a přihlásit" }));
+    await waitFor(() =>
+      expect(props.onEmailOtpLogin).toHaveBeenCalledWith(
+        "clen@example.cz",
+        "123456",
+      ),
+    );
+    expect(props.onEmailLogin).not.toHaveBeenCalled();
+  });
+
   it("moves from email request to six-digit verification", async () => {
     const props = renderLogin();
 

@@ -83,3 +83,7 @@ verify_enabled = true
 [auth.hook.before_user_created]
 enabled = true
 uri = "pg-functions://postgres/public/hook_allow_staff_or_anonymous_signup"
+
+# The handler verifies the JWT with auth.getUser and checks the admin role.
+[functions.generate-member-login-code]
+verify_jwt = false

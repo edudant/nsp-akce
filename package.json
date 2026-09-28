@@ -10,7 +10,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
-    "check": "npm run lint && npm run test && npm run build"
+    "check": "npm run lint && npm run test && npm run build",
+    "test:integration": "node scripts/test-feature-integration.mjs",
+    "test:browser": "node scripts/test-feature-browser.mjs",
+    "dev:features": "node scripts/dev-feature-local.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",

@@ -1,18 +1,16 @@
+import { EventForm, type EventFormInput } from "../components/EventForm";
 import {
   CalendarDays,
   CalendarPlus,
-  Check,
   ChevronLeft,
   ChevronRight,
   Clock3,
   List,
   MapPin,
   Search,
-  SlidersHorizontal,
   UsersRound,
 } from "lucide-react";
 import {
-  addDays,
   addMonths,
   eachDayOfInterval,
   endOfMonth,
@@ -25,7 +23,7 @@ import {
   subMonths,
 } from "date-fns";
 import { cs } from "date-fns/locale";
-import { type FormEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { appApi } from "../lib/dataApi";
 import {
@@ -47,8 +45,6 @@ import {
   Dialog,
   EventStatusBadge,
   EventTypeBadge,
-  Field,
-  Select,
 } from "../components/Ui";
 
 type EventFilter = "all" | EventType;
@@ -101,10 +97,10 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
       <PageHeader
         actions={
           canEdit ? (
-          <Button onClick={() => setCreateOpen(true)}>
-            <CalendarPlus aria-hidden="true" />
-            Nová událost
-          </Button>
+            <Button onClick={() => setCreateOpen(true)}>
+              <CalendarPlus aria-hidden="true" />
+              Nová událost
+            </Button>
           ) : null
         }
         description="Plánujte zkoušky a vystoupení, sbírejte zájem a zapisujte účast."
@@ -131,9 +127,11 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
             >
               {label}
               <span>
-                {database.data.events.filter(
-                  (event) => value === "all" || event.type === value,
-                ).length}
+                {
+                  database.data.events.filter(
+                    (event) => value === "all" || event.type === value,
+                  ).length
+                }
               </span>
             </button>
           ))}
@@ -237,7 +235,9 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
 }
 
 function EventRow({ event }: { event: EnsembleEvent }) {
-  const yes = event.attendance.filter((record) => record.interest === "yes").length;
+  const yes = event.attendance.filter(
+    (record) => record.interest === "yes",
+  ).length;
   const recorded = event.attendance.filter(
     (record) => record.status !== "unknown",
   ).length;
@@ -299,10 +299,10 @@ function EventRow({ event }: { event: EnsembleEvent }) {
               ? "moje docházka"
               : "moje odpověď"
             : total > 0
-            ? closed
-              ? "zapsaná docházka"
-              : "potvrzený zájem"
-            : "souhrn není zveřejněný"}
+              ? closed
+                ? "zapsaná docházka"
+                : "potvrzený zájem"
+              : "souhrn není zveřejněný"}
         </small>
         {!personalRecord ? (
           <span className="progress">
@@ -400,248 +400,23 @@ function EventCalendar({
   );
 }
 
-type CreateEventInput = Omit<EnsembleEvent, "id" | "attendance" | "pairs">;
-
 function CreateEventDialog({
   open,
   loading,
   error,
   onClose,
   onCreate,
-  programCatalog,
 }: {
   open: boolean;
   loading: boolean;
   error?: string;
   onClose: () => void;
-  onCreate: (event: CreateEventInput) => void;
+  onCreate: (event: EventFormInput) => void;
   programCatalog: ProgramCatalogItem[];
 }) {
-  const [type, setType] = useState<EventType>("rehearsal");
-  const [title, setTitle] = useState("Čtvrteční zkouška");
-  const [date, setDate] = useState(() =>
-    format(addDays(parseISO(todayInPrague()), 7), "yyyy-MM-dd"),
-  );
-  const [startTime, setStartTime] = useState("19:00");
-  const [endTime, setEndTime] = useState("21:00");
-  const [location, setLocation] = useState("Sokolovna Postřekov");
-  const [selectedPrograms, setSelectedPrograms] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const [customProgram, setCustomProgram] = useState("");
-  const [weight, setWeight] = useState("1");
-  const [capacity, setCapacity] = useState("8");
-
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    const chosenPrograms = programCatalog.filter((item) =>
-      selectedPrograms.has(item.id),
-    );
-    const programItems = [
-      ...chosenPrograms.map((item, index) => ({
-        id: `catalog-${item.id}`,
-        name: item.name,
-        catalogId: item.id,
-        custom: false,
-        sortOrder: index + 1,
-      })),
-      ...(customProgram.trim()
-        ? [
-            {
-              id: "custom-new",
-              name: customProgram.trim(),
-              custom: true,
-              sortOrder: chosenPrograms.length + 1,
-            },
-          ]
-        : []),
-    ];
-    onCreate({
-      title,
-      type,
-      date,
-      startTime,
-      endTime,
-      location,
-      status: "open",
-      weight: Number(weight),
-      capacityPairs: Number(capacity),
-      program: programItems.map((item) => item.name).join(", ") || undefined,
-      programItems,
-      note: undefined,
-      responseDeadline:
-        type === "performance"
-          ? format(parseISO(date), "yyyy-MM-dd")
-          : undefined,
-      pairsPublished: false,
-    });
-  };
-
   return (
-    <Dialog
-      description="Termín i pravidla můžete později upravit."
-      onClose={onClose}
-      open={open}
-      title="Přidat událost"
-    >
-      <form className="dialog-form" onSubmit={handleSubmit}>
-        <div className="event-type-picker">
-          <button
-            aria-pressed={type === "rehearsal"}
-            className={type === "rehearsal" ? "is-active" : ""}
-            onClick={() => {
-              setType("rehearsal");
-              setTitle("Čtvrteční zkouška");
-              setWeight("1");
-            }}
-            type="button"
-          >
-            <CalendarDays aria-hidden="true" />
-            <span>
-              <strong>Zkouška</strong>
-              <small>Běžná nebo generální</small>
-            </span>
-            {type === "rehearsal" ? <Check aria-hidden="true" /> : null}
-          </button>
-          <button
-            aria-pressed={type === "performance"}
-            className={type === "performance" ? "is-active" : ""}
-            onClick={() => {
-              setType("performance");
-              setTitle("");
-              setWeight("2");
-            }}
-            type="button"
-          >
-            <UsersRound aria-hidden="true" />
-            <span>
-              <strong>Vystoupení</strong>
-              <small>Se zájmem a výběrem</small>
-            </span>
-            {type === "performance" ? <Check aria-hidden="true" /> : null}
-          </button>
-        </div>
-        <Field htmlFor="event-title" label="Název">
-          <input
-            autoFocus
-            id="event-title"
-            onChange={(event) => setTitle(event.target.value)}
-            required
-            value={title}
-          />
-        </Field>
-        <div className="form-grid form-grid--3">
-          <Field htmlFor="event-date" label="Datum">
-            <input
-              id="event-date"
-              onChange={(event) => setDate(event.target.value)}
-              required
-              type="date"
-              value={date}
-            />
-          </Field>
-          <Field htmlFor="event-start" label="Začátek">
-            <input
-              id="event-start"
-              onChange={(event) => setStartTime(event.target.value)}
-              required
-              type="time"
-              value={startTime}
-            />
-          </Field>
-          <Field htmlFor="event-end" label="Konec">
-            <input
-              id="event-end"
-              onChange={(event) => setEndTime(event.target.value)}
-              required
-              type="time"
-              value={endTime}
-            />
-          </Field>
-        </div>
-        <Field htmlFor="event-location" label="Místo">
-          <div className="input-with-icon">
-            <MapPin aria-hidden="true" />
-            <input
-              id="event-location"
-              onChange={(event) => setLocation(event.target.value)}
-              required
-              value={location}
-            />
-          </div>
-        </Field>
-        <fieldset className="program-picker">
-          <legend>Program / pásma</legend>
-          <p>Vyberte jedno nebo více pásem, která se budou na události tančit.</p>
-          <div>
-            {programCatalog
-              .filter((item) => item.active)
-              .sort((first, second) => first.sortOrder - second.sortOrder)
-              .map((item) => (
-                <label key={item.id}>
-                  <input
-                    checked={selectedPrograms.has(item.id)}
-                    onChange={(input) => {
-                      setSelectedPrograms((current) => {
-                        const next = new Set(current);
-                        if (input.target.checked) next.add(item.id);
-                        else next.delete(item.id);
-                        return next;
-                      });
-                    }}
-                    type="checkbox"
-                  />
-                  {item.name}
-                </label>
-              ))}
-          </div>
-          <Field htmlFor="event-custom-program" label="Jiné pásmo pro tuto událost">
-            <input
-              id="event-custom-program"
-              onChange={(event) => setCustomProgram(event.target.value)}
-              placeholder="Volitelné vlastní pásmo"
-              value={customProgram}
-            />
-          </Field>
-        </fieldset>
-        <div className="form-grid">
-          <Field htmlFor="event-weight" label="Bodová váha">
-            <Select
-              id="event-weight"
-              onChange={(event) => setWeight(event.target.value)}
-              value={weight}
-            >
-              <option value="0.5">0,5 bodu</option>
-              <option value="1">1 bod</option>
-              <option value="1.5">1,5 bodu</option>
-              <option value="2">2 body</option>
-            </Select>
-          </Field>
-          <Field htmlFor="event-capacity" label="Počet párů">
-            <div className="input-with-icon">
-              <SlidersHorizontal aria-hidden="true" />
-              <input
-                id="event-capacity"
-                max="20"
-                min="1"
-                onChange={(event) => setCapacity(event.target.value)}
-                type="number"
-                value={capacity}
-              />
-            </div>
-          </Field>
-        </div>
-        {error ? <p className="form-error">{error}</p> : null}
-        <footer className="dialog-actions">
-          <Button onClick={onClose} type="button" variant="ghost">
-            Zrušit
-          </Button>
-          <Button loading={loading} type="submit">
-            <CalendarPlus aria-hidden="true" />
-            Vytvořit událost
-          </Button>
-        </footer>
-      </form>
+    <Dialog open={open} onClose={onClose} title="Přidat událost">
+      <EventForm loading={loading} error={error} onSave={onCreate} />
     </Dialog>
   );
 }

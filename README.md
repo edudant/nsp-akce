@@ -81,3 +81,9 @@ frontendovém rozhraní není bezpečnostní hranice.
 Lokální spuštění vyžaduje připojení k Supabase. Produkční Supabase obsahuje
 skutečná data souboru importovaná ze soukromého Excelu. Zdrojový Excel a osobní
 údaje členů zůstávají mimo veřejný GitHub.
+
+## Sezóny, docházka, generátory a písně
+
+Schválený rozsah je v [zadání](docs/ZADANI_SEZONY_UCAST_A_PAROVANI.md).
+[Implementace a testy](docs/IMPLEMENTACE_A_TESTY_2026_09.md) obsahují výsledky
+lokálního ověření, příkazy pro opakování testů a přípravu nasazení nové verze.
