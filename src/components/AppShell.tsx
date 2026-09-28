@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  Eye,
   ChevronRight,
   Home,
   LogOut,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import type { SessionUser } from "../lib/domain";
+import { Help } from "./Help";
 import { BrandMark } from "./BrandMark";
 import { AppLink } from "./Router";
 
@@ -33,11 +35,15 @@ export function AppShell({
   currentPath,
   session,
   onSignOut,
+  memberPreview = false,
+  onToggleMemberPreview,
 }: {
   children: ReactNode;
   currentPath: string;
   session: SessionUser;
   onSignOut: () => void;
+  memberPreview?: boolean;
+  onToggleMemberPreview?: () => void;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const availableNavigation = navigation.filter(
@@ -159,6 +165,38 @@ export function AppShell({
           )}
         </header>
 
+        {onToggleMemberPreview && (
+          <section className="view-mode" aria-label="Režim zobrazení">
+            <div className="view-mode__controls">
+              <span>
+                {memberPreview
+                  ? "Zobrazení jako běžný člen"
+                  : "Zobrazení administrátora"}
+              </span>
+              <button
+                className="button button--secondary button--medium"
+                type="button"
+                aria-pressed={memberPreview}
+                onClick={onToggleMemberPreview}
+              >
+                <Eye aria-hidden="true" />
+                {memberPreview ? "Zpět do administrace" : "Zobrazit jako člen"}
+              </button>
+            </div>
+            <Help title="Jak funguje zobrazení člena">
+              <p>
+                Náhled respektuje viditelnost pro běžné členy: skryje interní
+                údaje, administraci a dosud nezveřejněné páry a série písní.
+                Přihlášení admina zůstává zachované.
+              </p>
+              <p>
+                Moje odpovědi, přání a historie patří vašemu vlastnímu členskému
+                účtu. Uložení odpovědi nebo přání je skutečná změna. Pokud s
+                účtem není propojený člen, osobní odpovědi se nezobrazí.
+              </p>
+            </Help>
+          </section>
+        )}
         <main id="main-content">{children}</main>
 
         <nav

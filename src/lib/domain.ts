@@ -240,7 +240,7 @@ export interface SessionUser {
 }
 
 export interface AppApi {
-  getDatabase(): Promise<AppDatabase>;
+  getDatabase(memberPreview?: boolean): Promise<AppDatabase>;
   getMembers(): Promise<Member[]>;
   getEvents(): Promise<EnsembleEvent[]>;
   getEvent(id: string): Promise<EnsembleEvent | null>;
@@ -297,7 +297,7 @@ export interface AppApi {
     partnerIds: string[],
   ): Promise<void>;
   saveSeason(input: Omit<Season, "id"> & { id?: string }): Promise<void>;
-  getScores(filter: ScoreFilter): Promise<ScoreRow[]>;
+  getScores(filter: ScoreFilter, memberPreview?: boolean): Promise<ScoreRow[]>;
   saveSong(input: Omit<Song, "id"> & { id?: string }): Promise<void>;
   saveSongCategory(
     input: Omit<SongCategory, "id"> & { id?: string },

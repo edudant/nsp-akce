@@ -91,3 +91,21 @@ Typ sezóny s existujícími událostmi nelze změnit. Událost s uloženými p�
 nelze přesunout do Koled; místo toho vytvořte samostatnou koledovou událost.
 Generátor používá tvrdé zákazy a optimalizuje vážená doporučení; konfliktní
 přání mohou zůstat nesplněná, jak popisuje Help.
+
+## Admin: zobrazení jako člen
+
+Tlačítko „Zobrazit jako člen“ nad obsahem přepne admina do členského pohledu.
+„Zpět do administrace“ obnoví správu. Funguje i na mobilu. Z Nastavení nebo
+Členů přepnutí vede na přehled. Obnovení stránky vrací admin zobrazení.
+
+Náhled používá RPC `member_preview_v3`, stejné read projekce jako člen a
+oddělenou query cache. Skrývá interní údaje, draft události, nezveřejněné
+páry, nepotvrzené série a ostatní odpovědi před potvrzením vystoupení.
+Oprávnění skutečného účtu se nemění. Osobní historie, odpovědi a přání patří
+přihlášenému adminovi; ukládání odpovědí je skutečná změna. Admin bez
+propojeného člena vidí přehled bez osobních odpovědí. V aplikaci je Help.
+
+Migrace: `20260928120000_admin_member_preview.sql`. Integration testy
+ověřují omezení dat i scores, vlastní identitu, odmítnutí non-admin a
+zachování admin přístupu. Browser test ověřuje přepnutí z Nastavení,
+členské ovládání, potvrzené série, skrytí zkušeností a návrat na mobilu.

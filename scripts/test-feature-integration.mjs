@@ -132,6 +132,34 @@ try {
       (m) => !("experience" in m) && !("note" in m) && !("account" in m),
     ),
   );
+  const preview = ok(await admin.rpc("member_preview_v3"));
+  assert.equal(preview.accessMode, "member");
+  assert.equal(preview.myMemberId, members[0].id);
+  assert.deepEqual(preview.preferences, []);
+  assert.ok(
+    preview.members.every(
+      (m) =>
+        !m.experienceKnown &&
+        !("experience" in m) &&
+        !("note" in m) &&
+        !("account" in m),
+    ),
+  );
+  const previewScores = ok(
+    await admin.rpc("member_preview_v3", { filters: { seasonId: dance } }),
+  );
+  assert.ok(
+    previewScores.every(
+      (r) => !r.member.experienceKnown && !("experience" in r.member),
+    ),
+  );
+  assert.equal((await db(admin)).accessMode, "admin");
+  assert.ok((await db(admin)).members.every((m) => m.experienceKnown));
+  fail(await member.rpc("member_preview_v3"));
+  fail(await client(anon).rpc("member_preview_v3"));
+  pass(
+    "Member preview restricts private data and scores, preserves own identity and real admin access, rejects non-admins",
+  );
   fail(await member.from("members").select("experience_level"));
   fail(await member.rpc("get_member_home"));
   fail(await member.rpc("get_member_session_context"));
@@ -230,6 +258,23 @@ try {
   pass("Percentage points and seasonal isolation");
   const performance = ok(await rpc(admin, "event", input("performance"))).id;
   eventIds.push(performance);
+  const draftPreviewEvent = ok(
+    await rpc(admin, "event", { ...input("rehearsal"), status: "draft" }),
+  ).id;
+  eventIds.push(draftPreviewEvent);
+  ok(await rpc(admin, "event", { id: draftPreviewEvent, status: "draft" }));
+  const openPreview = ok(await admin.rpc("member_preview_v3"));
+  assert.ok(!openPreview.events.some((e) => e.id === draftPreviewEvent));
+  const previewPerformance = openPreview.events.find(
+    (e) => e.id === performance,
+  );
+  assert.equal(previewPerformance.attendanceScope, "self");
+  assert.ok(
+    previewPerformance.attendance.every((a) => a.memberId === members[0].id),
+  );
+  pass(
+    "Member preview hides draft events and others' open performance responses",
+  );
   fail(
     await rpc(member, "response", {
       id: performance,
@@ -270,15 +315,13 @@ try {
   );
   const [memberA, memberB] = [members[1].id, members[2].id].sort();
   ok(
-    await root
-      .from("pairing_preferences")
-      .insert({
-        member_a_id: memberA,
-        member_b_id: memberB,
-        kind: "forbidden",
-        strength: 5,
-        private_reason: "PRIVATE REASON",
-      }),
+    await root.from("pairing_preferences").insert({
+      member_a_id: memberA,
+      member_b_id: memberB,
+      kind: "forbidden",
+      strength: 5,
+      private_reason: "PRIVATE REASON",
+    }),
   );
   assert.ok(
     !(await db(member)).events
@@ -373,6 +416,13 @@ try {
     admin.rpc("save_pairs_v3", { event_id: id, pairs: p, published });
   ok(await save(performance, pairs, false));
   assert.equal(
+    ok(await admin.rpc("member_preview_v3")).events.find(
+      (e) => e.id === performance,
+    ).pairs.length,
+    0,
+  );
+  pass("Member preview hides unpublished performance pairs");
+  assert.equal(
     (await db(member)).events.find((e) => e.id === performance).pairs.length,
     0,
   );
@@ -459,6 +509,12 @@ try {
       songIds: [songId],
       confirmed: false,
     }),
+  );
+  assert.equal(
+    ok(await admin.rpc("member_preview_v3")).events.find(
+      (e) => e.id === performance,
+    ).songSeries.length,
+    0,
   );
   let series = (await db(admin)).events
     .find((e) => e.id === performance)

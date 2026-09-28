@@ -338,6 +338,7 @@ try {
     "/udalosti/" + fixture.rehearsal,
     db.events.find((e) => e.id === fixture.rehearsal).title,
   );
+  await member.reload();
   await member
     .getByRole("heading", { name: "Uložené sady párů", exact: true })
     .waitFor();
@@ -364,6 +365,64 @@ try {
   assert.equal(await admin.getByLabel("Typ sezóny").count(), 1);
   pass(
     "Settings include catalogue with compound song names and manual seasons",
+  );
+  await admin
+    .getByRole("button", { name: "Zobrazit jako člen", exact: true })
+    .click();
+  await admin
+    .getByRole("button", { name: "Zpět do administrace", exact: true })
+    .waitFor();
+  assert.equal(await admin.evaluate(() => location.hash), "#/");
+  assert.equal(
+    await admin.getByRole("link", { name: "Nastavení", exact: true }).count(),
+    0,
+  );
+  assert.equal(
+    await admin.getByRole("link", { name: "Členové", exact: true }).count(),
+    0,
+  );
+  await go(admin, route, title);
+  assert.equal(
+    await admin
+      .getByRole("button", { name: "Upravit událost", exact: true })
+      .count(),
+    0,
+  );
+  await admin
+    .getByRole("heading", { name: "Browser songs · Potvrzená", exact: true })
+    .waitFor();
+  await go(admin, "/body", "Bodový přehled");
+  await admin.getByLabel("Období bodů").selectOption(fixture.carols);
+  await admin.waitForFunction(
+    () => !document.querySelector('main [role="status"]'),
+  );
+  assert.equal(await admin.locator(".member-cell .badge").count(), 0);
+  await admin.setViewportSize({ width: 390, height: 844 });
+  await noOverflow(admin);
+  await admin.screenshot({
+    path: screenshotDir + "/admin-member-preview-mobile.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  await admin
+    .getByRole("button", { name: "Zpět do administrace", exact: true })
+    .click();
+  await admin
+    .getByRole("button", { name: "Zobrazit jako člen", exact: true })
+    .waitFor();
+  await go(admin, route, title);
+  await admin
+    .getByRole("button", { name: "Upravit událost", exact: true })
+    .waitFor();
+  await admin.setViewportSize({ width: 1440, height: 1000 });
+  assert.equal(
+    await member
+      .getByRole("button", { name: "Zobrazit jako člen", exact: true })
+      .count(),
+    0,
+  );
+  pass(
+    "Admin member preview hides admin controls, respects publication and scores privacy, restores admin on mobile",
   );
   await go(member, "/body", "Bodový přehled");
   await member.getByLabel("Období bodů").selectOption(fixture.carols);

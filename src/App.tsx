@@ -1,5 +1,6 @@
 import { ArrowLeft, MapPinned } from "lucide-react";
 import { useEffect, useState } from "react";
+import { ViewContext } from "./components/DataContext";
 import { AppShell } from "./components/AppShell";
 import { BrandMark } from "./components/BrandMark";
 import { AppLink, matchRoute, navigate, useRoute } from "./components/Router";
@@ -26,6 +27,7 @@ export default function App() {
   const route = useRoute();
   const [session, setSession] = useState<SessionUser | null>(null);
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
+  const [previewAccount, setPreviewAccount] = useState<string | null>(null);
   const [authError, setAuthError] = useState("");
 
   useEffect(() => {
@@ -111,8 +113,14 @@ export default function App() {
     );
   }
 
-  const canRecord = session.role === "admin";
-  const canAdmin = session.role === "admin";
+  const accountScope = `${session.email ?? session.memberId ?? session.displayName}:${session.accessMode}`;
+  const memberPreview =
+    session.role === "admin" && previewAccount === accountScope;
+  const canRecord = session.role === "admin" && !memberPreview;
+  const canAdmin = canRecord;
+  const displayedSession: SessionUser = memberPreview
+    ? { ...session, role: "member", accessMode: "member" }
+    : session;
   const eventRoute = matchRoute(route, "/udalosti/:id");
 
   let page;
@@ -142,31 +150,45 @@ export default function App() {
   }
 
   return (
-    <AppShell
-      currentPath={route}
-      onSignOut={() => {
-        void (async () => {
-          setAuthError("");
-          await signOut();
-          setSession(null);
-          navigate("/");
-        })().catch((error: unknown) => {
-          setAuthError(
-            error instanceof Error
-              ? error.message
-              : "Odhlášení se nepodařilo.",
-          );
-        });
-      }}
-      session={session}
-    >
-      {authError ? (
-        <div className="global-error" role="alert">
-          {authError}
-        </div>
-      ) : null}
-      {page}
-    </AppShell>
+    <ViewContext.Provider value={{ memberPreview, scope: accountScope }}>
+      <AppShell
+        key={`${accountScope}:${memberPreview}`}
+        memberPreview={memberPreview}
+        onToggleMemberPreview={
+          session.role === "admin"
+            ? () => {
+                setPreviewAccount(memberPreview ? null : accountScope);
+                if (route === "/nastaveni" || route === "/clenove")
+                  navigate("/");
+              }
+            : undefined
+        }
+        currentPath={route}
+        onSignOut={() => {
+          void (async () => {
+            setAuthError("");
+            await signOut();
+            setSession(null);
+            setPreviewAccount(null);
+            navigate("/");
+          })().catch((error: unknown) => {
+            setAuthError(
+              error instanceof Error
+                ? error.message
+                : "Odhlášení se nepodařilo.",
+            );
+          });
+        }}
+        session={displayedSession}
+      >
+        {authError ? (
+          <div className="global-error" role="alert">
+            {authError}
+          </div>
+        ) : null}
+        {page}
+      </AppShell>
+    </ViewContext.Provider>
   );
 }
 

@@ -23,8 +23,12 @@ function normalizeMember(member: Member): Member {
     experienceKnown: member.experienceKnown === true,
   };
 }
-export async function getDatabaseV3(): Promise<AppDatabase> {
-  const { data, error } = await requireSupabase().rpc("get_app_database_v3");
+export async function getDatabaseV3(
+  memberPreview = false,
+): Promise<AppDatabase> {
+  const { data, error } = await requireSupabase().rpc(
+    memberPreview ? "member_preview_v3" : "get_app_database_v3",
+  );
   if (error) throw error;
   const db = data as AppDatabase;
   db.members = db.members.map(normalizeMember);
@@ -211,10 +215,13 @@ export const appApiV3: AppApi = {
   async saveSeason(input) {
     await mutate("season", input);
   },
-  async getScores(filters) {
-    const { data, error } = await requireSupabase().rpc("scores_v3", {
-      filters,
-    });
+  async getScores(filters, memberPreview = false) {
+    const { data, error } = await requireSupabase().rpc(
+      memberPreview ? "member_preview_v3" : "scores_v3",
+      {
+        filters,
+      },
+    );
     if (error) throw error;
     return (data as ScoreRow[]).map((row) => ({
       ...row,

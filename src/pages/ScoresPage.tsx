@@ -13,7 +13,7 @@ import { appApi } from "../lib/dataApi";
 import { ScoringHelp } from "../components/Help";
 import { useMemo, useState } from "react";
 import { roleLabels, type PairingRole } from "../lib/domain";
-import { useDatabase } from "../components/DataContext";
+import { useDatabase, useViewMode } from "../components/DataContext";
 import { ErrorState, LoadingState } from "../components/DataStates";
 import { formatPoints } from "../components/formatters";
 import { PageHeader } from "../components/PageHeader";
@@ -30,6 +30,7 @@ type SortKey = "total" | "name" | "rate";
 
 export function ScoresPage() {
   const database = useDatabase();
+  const { memberPreview, scope } = useViewMode();
   const [period, setPeriod] = useState("active");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -43,12 +44,13 @@ export function ScoresPage() {
         ? undefined
         : period;
   const scoreQuery = useQuery({
-    queryKey: ["scores", seasonId, period, from, to],
+    queryKey: ["scores", scope, memberPreview, seasonId, period, from, to],
     queryFn: () =>
       appApi.getScores(
         period === "custom"
           ? { dateFrom: from || undefined, dateTo: to || undefined }
           : { seasonId },
+        memberPreview,
       ),
     enabled: Boolean(database.data && (period === "custom" || seasonId)),
   });
