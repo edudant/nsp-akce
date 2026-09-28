@@ -37,7 +37,8 @@ const root = client(service);
 const tag = randomUUID().slice(0, 8);
 const password = "Local-test-password-27!";
 const ok = ({ data, error }) => {
-  if (error) throw new Error(error.message);
+  if (error)
+    throw new Error([error.message, error.details].filter(Boolean).join("\n"));
   return data;
 };
 const fail = (result) =>
