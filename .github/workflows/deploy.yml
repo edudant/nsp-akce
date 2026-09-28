@@ -44,17 +44,24 @@ jobs:
       - name: Start isolated test database
         shell: bash
         run: |
+          export NSP_TEST_PROJECT_ID="nsp-feature-tests-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          export NSP_TEST_PORT_BASE=$((20000 + (GITHUB_RUN_ID % 3000) * 10 + GITHUB_RUN_ATTEMPT))
+          export NSP_TEST_DB_PORT=$((NSP_TEST_PORT_BASE + 1))
+          export NSP_TEST_WORKDIR="${RUNNER_TEMP}/nsp-supabase-tests"
+          for variable in NSP_TEST_PROJECT_ID NSP_TEST_PORT_BASE NSP_TEST_DB_PORT NSP_TEST_WORKDIR; do
+            printf '%s=%s\n' "$variable" "${!variable}" >> "$GITHUB_ENV"
+          done
           node scripts/setup-feature-local.mjs
-          supabase start --workdir /tmp/nsp-supabase-tests --exclude studio,storage-api,realtime,postgres-meta,logflare,vector,supavisor
+          supabase start --workdir "$NSP_TEST_WORKDIR" --exclude studio,storage-api,realtime,postgres-meta,logflare,vector,supavisor
           bash scripts/test-feature-local-db.sh --reset
-          supabase functions serve --workdir /tmp/nsp-supabase-tests --no-verify-jwt > /tmp/nsp-feature-functions.log 2>&1 &
+          supabase functions serve --workdir "$NSP_TEST_WORKDIR" --no-verify-jwt > /tmp/nsp-feature-functions.log 2>&1 &
 
       - name: Lint and test database
         shell: bash
         run: |
           set -euo pipefail
-          supabase db lint --local --workdir /tmp/nsp-supabase-tests --level error
-          database_url="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          supabase db lint --local --workdir "$NSP_TEST_WORKDIR" --level error
+          database_url="postgresql://postgres:postgres@127.0.0.1:${NSP_TEST_DB_PORT}/postgres"
           for test_file in \
             supabase/tests/database_smoke_test.sql \
             supabase/tests/member_accounts_and_programs_smoke_test.sql
@@ -82,7 +89,7 @@ jobs:
 
       - name: Stop isolated test database
         if: always()
-        run: supabase stop --workdir /tmp/nsp-supabase-tests --no-backup
+        run: supabase stop --workdir "$NSP_TEST_WORKDIR" --no-backup
 
   deploy:
     environment:

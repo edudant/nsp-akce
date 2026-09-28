@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { writeFile } from "node:fs/promises";
-const url = "http://127.0.0.1:54321";
+const port = Number(process.env.NSP_TEST_PORT_BASE || 54321);
+assert.ok(Number.isInteger(port) && port >= 1024 && port <= 65000);
+const url = `http://127.0.0.1:${port}`;
 const jwt = (role) => {
   const part = (x) => Buffer.from(JSON.stringify(x)).toString("base64url");
   const body =

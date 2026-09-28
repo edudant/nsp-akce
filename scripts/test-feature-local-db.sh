@@ -2,7 +2,9 @@
 # Replays migrations ONLY in the isolated Docker project nsp-feature-tests.
 set -euo pipefail
 [[ "${1:-}" == "--reset" ]] || { echo 'Usage: bash scripts/test-feature-local-db.sh --reset'; exit 2; }
-container=supabase_db_nsp-feature-tests
+test_project=${NSP_TEST_PROJECT_ID:-nsp-feature-tests}
+[[ "$test_project" =~ ^nsp-feature-tests(-[0-9]+-[0-9]+)?$ ]] || exit 1
+container="supabase_db_$test_project"
 [[ "$(docker inspect --format '{{.Name}}' "$container")" == "/$container" ]] || exit 1
 root=$(cd "$(dirname "$0")/.." && pwd)
 docker exec "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'drop schema public cascade; create schema public; grant usage on schema public to postgres, anon, authenticated, service_role; grant all on schema public to postgres, service_role;' >/dev/null
