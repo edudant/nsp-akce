@@ -152,3 +152,20 @@ ověřuje menu, nastavení, skutečnou účast v detailu, audit a stavová tlač
 Migrace: `20260929120000_rehearsal_maybe_response.sql`. Regresní UI testy
 ověřují focus při psaní, sezóny, relevantní taby, přepínání sad a přehled.
 Browser test zahrnuje mobilní psaní v editaci a hromadné přidání před generováním.
+
+## Kompaktní účast a osobní hlasování (29. 9.)
+
+- Filtr sezón je součástí vyhledávacího panelu. Vlastní odpověď má ikonu
+  a barvu; skutečná účast se zobrazuje až po začátku akce.
+- Detail vždy zobrazuje vlastní uloženou odpověď a možnost změny podle
+  oprávnění. Identita se hledá i v úplném seznamu účastníků. Sdílený přístup
+  nabízí osobní přihlášení s návratem na stejnou akci.
+- Body jsou kompaktní tag s info tooltipem. Tlačítko zpět se na mobilu zalomí.
+- Účastník se otevírá přímo z řádku bez kontextového menu. Skutečná účast
+  má rychlé přepínače a po začátku je první v detailu. Předvyplnění při
+  uzavření zachovává dřívější ruční záznamy a audit.
+- Opožděný výsledek inicializace přihlášení nepřepíše novější ověřenou session.
+
+Ověřeno: 95 UI/unit testů, 24 integration scénářů, 16 browser scénářů,
+produkční build a mobilní layout člena i správce na šířce 320 px.
+Bez nové databázové migrace.

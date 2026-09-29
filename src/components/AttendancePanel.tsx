@@ -1,4 +1,3 @@
-import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
@@ -16,11 +15,14 @@ import {
 } from "../lib/ensembleRules";
 import { appApi } from "../lib/dataApi";
 import { databaseQueryKey } from "./DataContext";
-import { Button, Card, Dialog, Select, Badge, IconButton } from "./Ui";
+import { Button, Card, Dialog, Select, Badge } from "./Ui";
 import { ListHeader, ListRow } from "./CompactList";
 import { AuditDisclosure } from "./EventAudit";
 import { formatAuditTime } from "./formatters";
 import { Help } from "./Help";
+import { ChoiceButtons, responseChoices, ResponseBadge } from "./Participation";
+import { canRespondToEvent, eventHasStarted } from "../lib/memberPortal";
+import { todayInPrague } from "./formatters";
 export function ResponseEditor({
   event,
   record,
@@ -36,27 +38,27 @@ export function ResponseEditor({
 }) {
   const [response, setResponse] = useState<InterestStatus>(record.interest);
   const [note, setNote] = useState(record.note ?? "");
-  const allowed = admin || event.canRespond;
+  const allowed = admin || canRespondToEvent(event, todayInPrague());
   return (
     <form
-      className="feature-toolbar"
+      className="response-editor"
       onSubmit={(e) => {
         e.preventDefault();
         if (response === "maybe" && !note.trim()) return;
         onSave(response, note);
       }}
     >
-      <Select
-        aria-label="Odpověď"
+      <ChoiceButtons
+        label="Odpověď"
         value={response}
         disabled={!allowed || pending}
-        onChange={(e) => setResponse(e.target.value as InterestStatus)}
-      >
-        <option value="unset">Bez odpovědi</option>
-        <option value="yes">Ano</option>
-        <option value="no">Ne</option>
-        <option value="maybe">Zatím nevím</option>
-      </Select>
+        choices={
+          admin
+            ? [...responseChoices, { value: "unset", label: "Bez odpovědi" }]
+            : responseChoices
+        }
+        onChange={setResponse}
+      />
       {(response === "maybe" || event.type === "performance" || !!note) && (
         <input
           aria-label="Poznámka k odpovědi"
@@ -68,7 +70,15 @@ export function ResponseEditor({
           onChange={(e) => setNote(e.target.value)}
         />
       )}
-      <Button type="submit" disabled={!allowed} loading={pending}>
+      <Button
+        type="submit"
+        disabled={
+          !allowed ||
+          (response === "unset" && !admin) ||
+          (response === "maybe" && !note.trim())
+        }
+        loading={pending}
+      >
         Uložit odpověď
       </Button>
     </form>
@@ -84,7 +94,6 @@ export function AttendancePanel({
   admin: boolean;
 }) {
   const query = useQueryClient();
-  const [quickId, setQuickId] = useState<string | null>(null);
   const [addIds, setAddIds] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState("");
@@ -169,21 +178,21 @@ export function AttendancePanel({
         attendancePercent: status === "partial" ? 50 : undefined,
       },
     });
-  const attendanceSelect = (member: Member, record: AttendanceRecord) => (
-    <Select
-      aria-label={`Skutečná účast ${member.fullName}`}
-      disabled={update.isPending}
+  const started = eventHasStarted(event);
+  const attendanceSwitches = (member: Member, record: AttendanceRecord) => (
+    <ChoiceButtons
+      label={`Skutečná účast ${member.fullName}`}
       value={record.status}
-      onChange={(e) =>
-        setAttendance(member.id, e.target.value as AttendanceRecord["status"])
-      }
-    >
-      <option value="unknown">Nezapsáno</option>
-      <option value="present">Přítomen</option>
-      <option value="partial">Částečně</option>
-      <option value="absent">Nepřítomen</option>
-      <option value="excused">Omluven</option>
-    </Select>
+      disabled={update.isPending}
+      choices={[
+        { value: "present", label: "Přítomen" },
+        { value: "partial", label: "Částečně" },
+        { value: "absent", label: "Nepřítomen" },
+        { value: "excused", label: "Omluven" },
+        { value: "unknown", label: "Nezapsáno" },
+      ]}
+      onChange={(value) => setAttendance(member.id, value)}
+    />
   );
   return (
     <Card className="feature-card">
@@ -200,13 +209,22 @@ export function AttendancePanel({
             : undefined
         }
       />
+      <p className="attendance-view-label">
+        {started ? "Skutečná účast" : "Nahlášená účast"}
+      </p>
+      {admin && started && event.status !== "closed" && (
+        <p className="attendance-prefill-hint">
+          Při uzavření akce se nezapsaná skutečná účast převezme z odpovědí.
+          Ruční změny zůstanou zachované.
+        </p>
+      )}
       {admin && (
         <Help title="Výběr a skutečná účast">
           <p>
-            Přidání člena rovnou zapíše plnou účast a vybere jej pro párování.
-            Rychlou volbou změníte skutečnou účast; procenta, odpověď a historii
-            najdete po kliknutí na jméno. Nepřítomní a omluvení se do generátoru
-            nevybírají.
+            Přidání člena rovnou zapíše plnou účast a vybere jej pro párování. V
+            detailu přepínači změníte skutečnou účast; procenta, odpověď a
+            historii najdete po kliknutí na jméno. Nepřítomní a omluvení se do
+            generátoru nevybírají.
           </p>
           <p>
             Uzavření převezme Ano jako přítomen a Ne jako nepřítomen pouze u
@@ -273,24 +291,18 @@ export function AttendancePanel({
                 </>
               }
               meta={
-                <Badge>
-                  {attendanceLabels[record.status]}
-                  {record.status === "partial" &&
-                    ` ${record.attendancePercent} %`}
-                </Badge>
+                started ? (
+                  <Badge>
+                    {attendanceLabels[record.status]}
+                    {record.status === "partial" &&
+                      ` ${record.attendancePercent} %`}
+                  </Badge>
+                ) : (
+                  <ResponseBadge response={record.interest} />
+                )
               }
               onOpen={() => setDetailId(member.id)}
-            >
-              {admin && (
-                <IconButton
-                  label={`Nastavit účast ${member.fullName}`}
-                  disabled={update.isPending}
-                  onClick={() => setQuickId(member.id)}
-                >
-                  <MoreHorizontal aria-hidden="true" />
-                </IconButton>
-              )}
-            </ListRow>
+            />
           );
         })}
       </div>
@@ -305,46 +317,15 @@ export function AttendancePanel({
         </p>
       )}
       <Dialog
-        title="Nastavit skutečnou účast"
-        open={!!quickId}
-        onClose={() => setQuickId(null)}
-        size="small"
-      >
-        <div className="attendance-menu">
-          {(
-            ["present", "partial", "absent", "excused", "unknown"] as const
-          ).map((value) => (
-            <Button
-              variant="secondary"
-              key={value}
-              disabled={update.isPending}
-              onClick={() => {
-                setAttendance(quickId!, value);
-                setQuickId(null);
-              }}
-            >
-              {attendanceLabels[value]}
-            </Button>
-          ))}
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setDetailId(quickId);
-              setQuickId(null);
-            }}
-          >
-            Otevřít detail a procenta
-          </Button>
-        </div>
-      </Dialog>
-      <Dialog
         open={!!detailMember && !!detailRecord}
         title={detailMember?.fullName ?? "Detail účastníka"}
         onClose={() => setDetailId(null)}
       >
         {detailMember && detailRecord && (
-          <>
-            <section className="participant-detail-section">
+          <div
+            className={`participant-detail ${started ? "participant-detail--actual" : ""}`}
+          >
+            <section className="participant-detail-section participant-detail-response">
               <h3>Nahlášená účast</h3>
               {admin ? (
                 <ResponseEditor
@@ -367,7 +348,7 @@ export function AttendancePanel({
                 </p>
               )}
             </section>
-            <section className="participant-detail-section">
+            <section className="participant-detail-section participant-detail-actual">
               <h3>Skutečná účast a body</h3>
               <p>
                 <Badge>
@@ -380,7 +361,7 @@ export function AttendancePanel({
               </p>
               {admin ? (
                 <>
-                  {attendanceSelect(detailMember, detailRecord)}
+                  {attendanceSwitches(detailMember, detailRecord)}
                   {detailRecord.status === "partial" && (
                     <label className="field">
                       Účast %
@@ -479,7 +460,7 @@ export function AttendancePanel({
                 title="Historie změn účasti"
               />
             )}
-          </>
+          </div>
         )}
       </Dialog>
       {admin && (

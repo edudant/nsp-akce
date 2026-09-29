@@ -30,9 +30,7 @@ export function recentAttendanceEntries(
   limit = 5,
 ): MemberHistoryEntry[] {
   return history
-    .filter(
-      (entry) => entry.date <= today && entry.attendance !== "unknown",
-    )
+    .filter((entry) => entry.date <= today && entry.attendance !== "unknown")
     .sort((first, second) => second.date.localeCompare(first.date))
     .slice(0, limit);
 }
@@ -73,7 +71,9 @@ export function groupEventPairs(event: EnsembleEvent): EventPairGroup[] {
 
     if (current) {
       current.pairs.push(pair);
-      current.programNames = [...new Set([...current.programNames, ...programNames])];
+      current.programNames = [
+        ...new Set([...current.programNames, ...programNames]),
+      ];
       continue;
     }
 
@@ -91,4 +91,22 @@ export function groupEventPairs(event: EnsembleEvent): EventPairGroup[] {
       first.sortOrder - second.sortOrder ||
       first.name.localeCompare(second.name, "cs"),
   );
+}
+
+/** Compare Prague wall-clock values; canClose is supplied by the database when available. */
+export function eventHasStarted(
+  event: EnsembleEvent,
+  now = new Date(),
+): boolean {
+  if (typeof event.canClose === "boolean") return event.canClose;
+  const parts = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Prague",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(now);
+  return `${event.date} ${event.startTime}` <= parts;
 }

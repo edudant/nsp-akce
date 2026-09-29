@@ -201,7 +201,12 @@ try {
     "Friday defaults and performance creation with deadline, group estimates and singing",
   );
   await go(member, route, title);
-  assert.equal(await member.getByLabel("Odpověď").isDisabled(), false);
+  assert.equal(
+    await member
+      .getByRole("radio", { name: "Přijdu", exact: true })
+      .isDisabled(),
+    false,
+  );
   await member.getByText("Vybrat přání partnerů", { exact: true }).click();
   assert.equal(
     await member
@@ -223,14 +228,52 @@ try {
       .count(),
     0,
   );
-  await member.getByLabel("Odpověď").selectOption("maybe");
+  await member
+    .getByRole("radio", { name: "Zatím nevím", exact: true })
+    .locator("..")
+    .click();
   assert.equal(
     await member.getByLabel("Poznámka k odpovědi").getAttribute("required"),
     "",
   );
   await member.getByLabel("Poznámka k odpovědi").fill("Čekám na potvrzení");
   await member.getByRole("button", { name: "Uložit odpověď" }).click();
-  pass("Member sees own open response and maybe requires a note");
+  await member
+    .locator(".my-attendance-card .response-badge")
+    .filter({ hasText: "Zatím nevím" })
+    .waitFor();
+  assert.equal(
+    await member
+      .locator(".my-attendance-card")
+      .getByText(/Skutečná účast:/)
+      .count(),
+    0,
+  );
+  await member.reload();
+  await member
+    .getByRole("radio", { name: "Přijdu", exact: true })
+    .locator("..")
+    .click();
+  await member
+    .getByRole("button", { name: "Uložit odpověď", exact: true })
+    .click();
+  await member.locator(".my-attendance-card .response-badge--yes").waitFor();
+  await member.reload();
+  assert.equal(
+    await member
+      .getByRole("radio", { name: "Přijdu", exact: true })
+      .isChecked(),
+    true,
+  );
+  await member
+    .getByRole("button", { name: "Jak se počítají body", exact: true })
+    .click();
+  await member.getByRole("tooltip").waitFor();
+  await noOverflow(member);
+  await member.keyboard.press("Escape");
+  pass(
+    "Personal vote is visible, editable and survives reload; future attendance stays hidden and points use tooltip",
+  );
   await admin.getByRole("tab", { name: "Účastníci", exact: true }).click();
   await admin
     .getByRole("button", { name: "Přidat člena", exact: true })
@@ -338,7 +381,12 @@ try {
     .getByRole("button", { name: "Uzavřít akci", exact: true })
     .waitFor();
   await member.reload();
-  assert.equal(await member.getByLabel("Odpověď").count(), 0);
+  assert.equal(
+    await member
+      .getByRole("radio", { name: "Přijdu", exact: true })
+      .isDisabled(),
+    true,
+  );
   await member
     .getByText("Odpovědi jsou uzamčené. Změnu zadá admin.", { exact: true })
     .waitFor();
@@ -386,29 +434,31 @@ try {
   );
   await admin.getByRole("tab", { name: "Účastníci", exact: true }).click();
   await admin
-    .getByRole("button", {
-      name: "Nastavit účast " + own.fullName,
-      exact: true,
-    })
+    .getByRole("button", { name: "Detail: " + own.fullName, exact: true })
     .click();
   await admin
     .getByRole("dialog")
-    .getByRole("button", { name: "Částečně", exact: true })
+    .getByRole("radio", { name: "Částečně", exact: true })
+    .locator("..")
     .click();
+  const actualPercent =
+    (await admin.getByLabel("Procento účasti " + own.fullName).inputValue()) ===
+    "62.5"
+      ? 63.5
+      : 62.5;
   await admin
-    .getByRole("button", { name: "Detail: " + own.fullName, exact: true })
-    .click();
-  await admin.getByLabel("Procento účasti " + own.fullName).fill("62.5");
+    .getByLabel("Procento účasti " + own.fullName)
+    .fill(String(actualPercent));
   const percentSaved = admin.waitForResponse(
     (r) =>
       r.url().includes("mutate_app_v3") &&
-      r.request().postDataJSON()?.payload?.attendancePercent === 62.5,
+      r.request().postDataJSON()?.payload?.attendancePercent === actualPercent,
   );
   await admin.getByLabel("Procento účasti " + own.fullName).press("Tab");
   assert.equal((await percentSaved).status(), 200);
   await admin.waitForFunction(
     () =>
-      !document.querySelector('select[aria-label^="Skutečná účast"]')?.disabled,
+      !document.querySelector(".participant-detail-actual fieldset")?.disabled,
   );
   await admin
     .getByRole("dialog")
@@ -422,7 +472,7 @@ try {
   await admin.getByLabel("Procento účasti " + own.fullName).waitFor();
   assert.equal(
     await admin.getByLabel("Procento účasti " + own.fullName).inputValue(),
-    "62.5",
+    String(actualPercent),
   );
   await admin
     .getByRole("dialog")
@@ -621,6 +671,13 @@ try {
   pass(
     "Shared-code login sees published content without administrative controls",
   );
+  await shared
+    .getByRole("button", { name: "Přihlásit se osobně", exact: true })
+    .click();
+  await shared.getByLabel("E-mailová adresa").waitFor();
+  assert.equal(await shared.locator(".app-layout").count(), 0);
+  pass("Shared access offers a personal login for own voting");
+
   await go(admin, route, title);
   await admin.setViewportSize({ width: 390, height: 844 });
   await noOverflow(admin);

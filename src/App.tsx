@@ -28,6 +28,9 @@ export default function App() {
   const [session, setSession] = useState<SessionUser | null>(null);
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
   const [previewAccount, setPreviewAccount] = useState<string | null>(null);
+  const [personalLoginReturn, setPersonalLoginReturn] = useState<string | null>(
+    null,
+  );
   const [authError, setAuthError] = useState("");
 
   useEffect(() => {
@@ -38,12 +41,17 @@ export default function App() {
     if (!isSupabaseConfigured) return;
 
     let active = true;
+    let authRevision = 0;
+    const initialRevision = authRevision;
     void getCurrentAppSession()
       .then((nextSession) => {
-        if (active) setSession(nextSession);
+        if (active && authRevision === initialRevision) {
+          setSession(nextSession);
+          if (nextSession) setAuthError("");
+        }
       })
       .catch((error: unknown) => {
-        if (active) {
+        if (active && authRevision === initialRevision) {
           setAuthError(
             error instanceof Error
               ? error.message
@@ -57,7 +65,9 @@ export default function App() {
 
     const unsubscribe = subscribeToAuth((nextSession) => {
       if (active) {
+        authRevision += 1;
         setSession(nextSession);
+        if (nextSession) setAuthError("");
         setAuthReady(true);
       }
     });
@@ -101,7 +111,8 @@ export default function App() {
           setAuthError("");
           const nextSession = await verifyEmailOtp(email, token);
           setSession(nextSession);
-          navigate("/");
+          navigate(personalLoginReturn ?? "/");
+          setPersonalLoginReturn(null);
         }}
         onSharedCodeLogin={async (code) => {
           setAuthError("");
@@ -135,6 +146,21 @@ export default function App() {
         canEdit={canRecord}
         canPair={canAdmin}
         eventId={eventRoute.id}
+        onPersonalLogin={() => {
+          void (async () => {
+            setAuthError("");
+            setPersonalLoginReturn(route);
+            await signOut();
+            setSession(null);
+            setPreviewAccount(null);
+          })().catch((error: unknown) =>
+            setAuthError(
+              error instanceof Error
+                ? error.message
+                : "Přihlášení se nepodařilo.",
+            ),
+          );
+        }}
       />
     );
   } else if (route === "/body") {

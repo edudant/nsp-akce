@@ -155,10 +155,13 @@ describe("feature UI flows", () => {
         pending={false}
       />,
     );
-    await user.selectOptions(screen.getByLabelText("Odpověď"), "maybe");
+    await user.click(screen.getByRole("radio", { name: "Zatím nevím" }));
     expect(screen.getByLabelText("Poznámka k odpovědi")).toBeRequired();
     await user.click(screen.getByRole("button", { name: "Uložit odpověď" }));
     expect(save).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Uložit odpověď" }),
+    ).toBeDisabled();
     await user.type(screen.getByLabelText("Poznámka k odpovědi"), "Čekám");
     await user.click(screen.getByRole("button", { name: "Uložit odpověď" }));
     expect(save).toHaveBeenCalledWith("maybe", "Čekám");
@@ -177,9 +180,9 @@ describe("feature UI flows", () => {
         pending={false}
       />,
     );
-    expect(screen.getByLabelText("Odpověď")).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "Přijdu" })).toBeDisabled();
     expect(
-      screen.queryByRole("option", { name: "Zatím nevím" }),
+      screen.queryByRole("radio", { name: "Zatím nevím" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByLabelText("Poznámka k odpovědi"),
@@ -310,7 +313,7 @@ describe("mobile action regressions", () => {
         onSave={save}
       />,
     );
-    await user.selectOptions(screen.getByLabelText("Odpověď"), "maybe");
+    await user.click(screen.getByRole("radio", { name: "Zatím nevím" }));
     const note = screen.getByLabelText("Poznámka k odpovědi");
     expect(note).toBeRequired();
     await user.type(note, "   ");
@@ -321,7 +324,7 @@ describe("mobile action regressions", () => {
     await user.click(screen.getByRole("button", { name: "Uložit odpověď" }));
     expect(save).toHaveBeenCalledWith("maybe", "Pracovní směna");
     expect(
-      screen.queryByRole("option", { name: "Náhradník" }),
+      screen.queryByRole("radio", { name: "Náhradník" }),
     ).not.toBeInTheDocument();
   });
   it("lists both active season kinds and includes older ones only when selected", async () => {
@@ -430,8 +433,125 @@ describe("mobile action regressions", () => {
       upcoming.compareDocumentPosition(points) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    await user.selectOptions(screen.getByLabelText("Odpověď"), "maybe");
+    await user.click(screen.getByRole("radio", { name: "Zatím nevím" }));
     expect(screen.getByLabelText("Poznámka k odpovědi")).toBeRequired();
     expect(screen.queryByText("Náhradník")).not.toBeInTheDocument();
+  });
+});
+
+describe("personal attendance and quick actual attendance", () => {
+  it("shows the saved member vote and lets them change it even without a member-list entry", async () => {
+    const user = userEvent.setup(),
+      event = fixture({ canClose: false, date: "2099-01-01" });
+    event.attendance[0].interest = "yes";
+    const db = setup(event);
+    db.myMemberId = "a";
+    db.members = [];
+    wrap(
+      <EventDetailPage
+        eventId="e"
+        canAdmin={false}
+        canEdit={false}
+        canPair={false}
+      />,
+    );
+    expect(screen.getByRole("radio", { name: "Přijdu" })).toBeChecked();
+    expect(screen.queryByText(/Skutečná účast:/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Nepřijdu" }));
+    await user.click(screen.getByRole("button", { name: "Uložit odpověď" }));
+    expect(api.updateMyResponse).toHaveBeenCalledWith("e", "no", "");
+  });
+  it("shows an initial voting form when own attendance record is not present", () => {
+    const db = setup(fixture({ attendance: [], canClose: false }));
+    db.myMemberId = "a";
+    wrap(
+      <EventDetailPage
+        eventId="e"
+        canAdmin={false}
+        canEdit={false}
+        canPair={false}
+      />,
+    );
+    expect(screen.getByRole("radio", { name: "Přijdu" })).toBeEnabled();
+  });
+  it("offers personal sign-in for shared access and does not invent a vote", async () => {
+    const user = userEvent.setup(),
+      login = vi.fn(),
+      db = setup();
+    db.accessMode = "shared";
+    wrap(
+      <EventDetailPage
+        eventId="e"
+        canAdmin={false}
+        canEdit={false}
+        canPair={false}
+        onPersonalLogin={login}
+      />,
+    );
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Přihlásit se osobně" }),
+    );
+    expect(login).toHaveBeenCalledOnce();
+  });
+  it("keeps own response graphical in the list when the full roster is visible", () => {
+    const event = fixture({
+      canClose: false,
+      status: "confirmed",
+      attendanceScope: "all",
+    });
+    event.attendance[0].interest = "yes";
+    const db = setup(event);
+    db.myMemberId = "a";
+    wrap(<EventsPage canEdit={false} />);
+    expect(screen.getByText("Přijdu").closest(".response-badge")).toHaveClass(
+      "response-badge--yes",
+    );
+    expect(screen.queryByText("Nezapsáno")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Sezóny: aktuální/).closest(".toolbar-card"),
+    ).toBeInTheDocument();
+  });
+  it("uses a small points tag with tap/keyboard help", async () => {
+    const user = userEvent.setup();
+    setup();
+    wrap(
+      <EventDetailPage
+        eventId="e"
+        canAdmin={false}
+        canEdit={false}
+        canPair={false}
+      />,
+    );
+    expect(screen.getByText("2 body")).toHaveClass("badge");
+    expect(
+      screen.queryByRole("heading", { name: "Body za účast" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Jak se počítají body" }),
+    );
+    expect(screen.getByRole("tooltip")).toHaveTextContent("50 %");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+  it("opens actual attendance first after start and updates it directly with radio switches", async () => {
+    const user = userEvent.setup(),
+      event = fixture({ canClose: true, status: "closed" });
+    event.attendance[0].selected = true;
+    const db = setup(event);
+    wrap(<AttendancePanel db={db} event={event} admin />);
+    expect(
+      screen.queryByRole("button", { name: /Nastavit účast/ }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Detail: Adam" }));
+    expect(
+      screen.getByRole("dialog").querySelector(".participant-detail"),
+    ).toHaveClass("participant-detail--actual");
+    await user.click(screen.getByRole("radio", { name: "Přítomen" }));
+    expect(api.updateAttendance).toHaveBeenCalledWith("e", "a", {
+      status: "present",
+      selected: true,
+      attendancePercent: undefined,
+    });
   });
 });

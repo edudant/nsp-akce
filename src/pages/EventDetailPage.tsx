@@ -10,12 +10,11 @@ import {
   Dialog,
   EventStatusBadge,
   EventTypeBadge,
-  Badge,
   Select,
 } from "../components/Ui";
 import { AuditDisclosure } from "../components/EventAudit";
 import { EventStateActions } from "../components/EventStateActions";
-import { Help, ScoringHelp } from "../components/Help";
+import { Help, InfoHelp, PointsTag } from "../components/Help";
 import { AttendancePanel, ResponseEditor } from "../components/AttendancePanel";
 import { EventForm } from "../components/EventForm";
 import { EventProgramEditor } from "../components/EventProgramEditor";
@@ -23,6 +22,9 @@ import { SongSeriesPanel } from "../components/SongSeriesPanel";
 import { AppLink } from "../components/Router";
 import { compatibleMembers } from "../lib/ensembleRules";
 import { formatDate, formatAuditTime } from "../components/formatters";
+import { ResponseBadge } from "../components/Participation";
+import { canRespondToEvent, eventHasStarted } from "../lib/memberPortal";
+import { todayInPrague } from "../components/formatters";
 import { attendanceLabels, interestLabels } from "../lib/domain";
 import type {
   AppDatabase,
@@ -36,11 +38,13 @@ export function EventDetailPage({
   eventId,
   canAdmin,
   canPair,
+  onPersonalLogin,
 }: {
   eventId: string;
   canEdit: boolean;
   canAdmin: boolean;
   canPair: boolean;
+  onPersonalLogin?: () => void;
 }) {
   const db = useDatabase();
   if (db.isLoading) return <LoadingState />;
@@ -55,6 +59,7 @@ export function EventDetailPage({
       event={event}
       admin={canAdmin}
       canPair={canPair}
+      onPersonalLogin={onPersonalLogin}
     />
   );
 }
@@ -63,11 +68,13 @@ function EventContent({
   event,
   admin,
   canPair,
+  onPersonalLogin,
 }: {
   db: AppDatabase;
   event: EnsembleEvent;
   admin: boolean;
   canPair: boolean;
+  onPersonalLogin?: () => void;
 }) {
   const query = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -124,7 +131,16 @@ function EventContent({
     onSuccess: refresh,
   });
   const member = db.members.find((m) => m.id === db.myMemberId);
-  const myRecord = event.attendance.find((r) => r.memberId === db.myMemberId);
+  const myRecord = db.myMemberId
+    ? (event.attendance.find((r) => r.memberId === db.myMemberId) ?? {
+        memberId: db.myMemberId,
+        interest: "unset" as const,
+        status: "unknown" as const,
+        selected: false,
+      })
+    : undefined;
+  const canRespond = canRespondToEvent(event, todayInPrague());
+  const started = eventHasStarted(event);
   const dance = event.seasonKind !== "carols";
   const pairSets = [...(event.pairSets ?? [])]
     .filter((s) => admin || s.published)
@@ -153,7 +169,10 @@ function EventContent({
     : sections[0]?.id;
   return (
     <div className="page">
-      <AppLink className="button button--secondary event-back" to="/udalosti">
+      <AppLink
+        className="button button--secondary button--medium event-back"
+        to="/udalosti"
+      >
         ← Zpět na seznam akcí
       </AppLink>
       <Card className="event-hero">
@@ -172,8 +191,19 @@ function EventContent({
       </Card>
       <div className="feature-toolbar">
         <EventTypeBadge type={event.type} />
-        <EventStatusBadge status={event.status} />
+        <div className="event-status-info">
+          <EventStatusBadge status={event.status} />{" "}
+          <InfoHelp label="Stavy akce a odpovědi">
+            <p>
+              {event.type === "rehearsal"
+                ? "Na zkoušku odpovídáte ano/ne/zatím nevím s povinnou poznámkou, dokud ji admin neuzavře. Při uzavření po začátku se skutečná účast předvyplní podle odpovědí; admin ji může opravit."
+                : "Na vystoupení odpovídáte ano/ne/zatím nevím s povinnou poznámkou. Po termínu pro vyjádření se akce automaticky potvrdí a odpovědi smí měnit jen admin. Před potvrzením vidíte vlastní odpověď, potom odpovědi ostatních."}
+            </p>
+          </InfoHelp>
+        </div>
         <span>{db.seasons?.find((s) => s.id === event.seasonId)?.name}</span>
+        <PointsTag points={event.weight} />
+
         {admin && (
           <>
             <Button variant="secondary" onClick={() => setEditing(true)}>
@@ -197,13 +227,6 @@ function EventContent({
       </div>
       {
         <section className="event-overview" aria-label="Detail a moje účast">
-          <Help title="Stavy akce a odpovědi">
-            <p>
-              {event.type === "rehearsal"
-                ? "Na zkoušku odpovídáte ano/ne/zatím nevím s povinnou poznámkou, dokud ji admin neuzavře. Při uzavření po začátku se skutečná účast předvyplní podle odpovědí; admin ji může opravit."
-                : "Na vystoupení odpovídáte ano/ne/zatím nevím s povinnou poznámkou. Po termínu pro vyjádření se akce automaticky potvrdí a odpovědi smí měnit jen admin. Před potvrzením vidíte vlastní odpověď, potom odpovědi ostatních."}
-            </p>
-          </Help>
           {event.responseDeadline && (
             <p>
               Termín pro vyjádření:{" "}
@@ -214,20 +237,10 @@ function EventContent({
               }).format(new Date(event.responseDeadline))}
             </p>
           )}
-          {member && myRecord && (
+          {myRecord && (
             <Card className="feature-card my-attendance-card">
               <h2>Moje účast</h2>
-              <Badge
-                tone={
-                  myRecord.interest === "yes"
-                    ? "green"
-                    : myRecord.interest === "no"
-                      ? "red"
-                      : "amber"
-                }
-              >
-                {interestLabels[myRecord.interest]}
-              </Badge>
+              <ResponseBadge response={myRecord.interest} />
               {(myRecord.adminResponse?.at || myRecord.memberResponse?.at) && (
                 <p className="response-timestamp">
                   Poslední odpověď:{" "}
@@ -244,13 +257,15 @@ function EventContent({
                     : " · vaše odpověď"}
                 </p>
               )}
-              <p>
-                Skutečná účast: {attendanceLabels[myRecord.status]}
-                {myRecord.status === "partial" &&
-                  ` ${myRecord.attendancePercent} %`}
-                {event.status === "closed" &&
-                  ` · ${myRecord.earnedPoints ?? 0} bodů`}
-              </p>
+              {started && (
+                <p>
+                  Skutečná účast: {attendanceLabels[myRecord.status]}
+                  {myRecord.status === "partial" &&
+                    ` ${myRecord.attendancePercent} %`}
+                  {event.status === "closed" &&
+                    ` · ${myRecord.earnedPoints ?? 0} bodů`}
+                </p>
+              )}
               {myRecord.memberResponse &&
                 myRecord.memberResponse.interest !== myRecord.interest && (
                   <p>
@@ -258,7 +273,7 @@ function EventContent({
                     {interestLabels[myRecord.memberResponse.interest]}
                   </p>
                 )}
-              {event.canRespond && (
+              {
                 <>
                   {" "}
                   <h3>Moje odpověď</h3>
@@ -272,23 +287,22 @@ function EventContent({
                     }
                   />
                 </>
-              )}
-              {myRecord.note && !event.canRespond && <p>{myRecord.note}</p>}
-              {!event.canRespond && (
-                <p>Odpovědi jsou uzamčené. Změnu zadá admin.</p>
-              )}
-              {event.type === "performance" && dance && (
+              }
+              {myRecord.note && !canRespond && <p>{myRecord.note}</p>}
+              {!canRespond && <p>Odpovědi jsou uzamčené. Změnu zadá admin.</p>}
+              {member && event.type === "performance" && dance && (
                 <>
-                  <Help title="Přání partnerů">
-                    <p>
-                      Vyberte kompatibilní partnery: opačnou roli a společné
-                      zařazení. Přání je doporučení pro generátor; jeho splnění
-                      může bránit zákaz dvojice, jiná přání nebo nedostatek
-                      partnerů. Vyšší body mohou zvýšit váhu vašeho přání.
-                    </p>
-                  </Help>
                   <details className="partner-wishes">
                     <summary>Vybrat přání partnerů</summary>
+                    <InfoHelp label="Pravidla přání partnerů">
+                      <p>
+                        Vyberte kompatibilní partnery: opačnou roli a společné
+                        zařazení. Přání je doporučení pro generátor; jeho
+                        splnění může bránit zákaz dvojice, jiná přání nebo
+                        nedostatek partnerů. Vyšší body mohou zvýšit váhu vašeho
+                        přání.
+                      </p>
+                    </InfoHelp>
                     <div className="standing-picker">
                       {db.members
                         .filter(
@@ -301,7 +315,7 @@ function EventContent({
                           <label key={m.id}>
                             <input
                               type="checkbox"
-                              disabled={!event.canRespond}
+                              disabled={!canRespond}
                               checked={wishes.includes(m.id)}
                               onChange={(e) =>
                                 setWishes(
@@ -316,7 +330,7 @@ function EventContent({
                         ))}
                     </div>
                     <Button
-                      disabled={!event.canRespond}
+                      disabled={!canRespond}
                       loading={saveWishes.isPending}
                       onClick={() => saveWishes.mutate()}
                     >
@@ -327,11 +341,29 @@ function EventContent({
               )}
             </Card>
           )}
-          <Card className="feature-card event-points">
-            <h2>Body za účast</h2>
-            <p>Plná účast: {event.weight} bodů.</p>
-            <ScoringHelp />
-          </Card>
+          {!myRecord && (
+            <Card className="feature-card personal-login-card">
+              <h2>Moje účast</h2>
+              {db.accessMode === "shared" ? (
+                <>
+                  <p>
+                    Společný kód slouží k prohlížení. Pro zobrazení a změnu
+                    vlastní odpovědi se přihlaste svým e-mailem.
+                  </p>
+                  {onPersonalLogin && (
+                    <Button onClick={onPersonalLogin}>
+                      Přihlásit se osobně
+                    </Button>
+                  )}
+                </>
+              ) : (
+                <p>
+                  Váš účet není propojený s členem. Správce ho může propojit v
+                  Nastavení → Přístupy; potom zde uvidíte svou odpověď.
+                </p>
+              )}
+            </Card>
+          )}
           {(admin || db.myMemberId) && (
             <AuditDisclosure
               eventId={event.id}

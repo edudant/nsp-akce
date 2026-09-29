@@ -28,13 +28,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { appApi } from "../lib/dataApi";
 import {
   attendanceLabels,
-  interestLabels,
   type EnsembleEvent,
   type EventType,
   type ProgramCatalogItem,
 } from "../lib/domain";
 import { databaseQueryKey, useDatabase } from "../components/DataContext";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataStates";
+import { ResponseBadge } from "../components/Participation";
+import { eventHasStarted } from "../lib/memberPortal";
 import { formatDate, todayInPrague } from "../components/formatters";
 import { PageHeader } from "../components/PageHeader";
 import { AppLink, navigate } from "../components/Router";
@@ -121,7 +122,7 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
         title="Akce"
       />
 
-      <Card className="toolbar-card">
+      <Card className="toolbar-card events-toolbar">
         <div className="filter-tabs" role="tablist" aria-label="Typ akce">
           {(
             [
@@ -188,36 +189,39 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
             </button>
           </div>
         </div>
+        {!!database.data.seasons?.length && (
+          <details className="season-filter">
+            <summary>
+              Sezóny: aktuální taneční a koledy
+              {olderSeasonIds.length
+                ? ` + ${olderSeasonIds.length} starší`
+                : ""}
+            </summary>
+            <div className="standing-picker">
+              {database.data.seasons.map((season) => (
+                <label key={season.id}>
+                  <input
+                    type="checkbox"
+                    checked={
+                      season.active || olderSeasonIds.includes(season.id)
+                    }
+                    disabled={season.active}
+                    onChange={(e) =>
+                      setOlderSeasonIds(
+                        e.target.checked
+                          ? [...olderSeasonIds, season.id]
+                          : olderSeasonIds.filter((id) => id !== season.id),
+                      )
+                    }
+                  />
+                  {season.name}
+                  {season.active ? " · aktuální" : ""}
+                </label>
+              ))}
+            </div>
+          </details>
+        )}
       </Card>
-
-      {!!database.data.seasons?.length && (
-        <details className="season-filter card">
-          <summary>
-            Sezóny: aktuální taneční a koledy
-            {olderSeasonIds.length ? ` + ${olderSeasonIds.length} starší` : ""}
-          </summary>
-          <div className="standing-picker">
-            {database.data.seasons.map((season) => (
-              <label key={season.id}>
-                <input
-                  type="checkbox"
-                  checked={season.active || olderSeasonIds.includes(season.id)}
-                  disabled={season.active}
-                  onChange={(e) =>
-                    setOlderSeasonIds(
-                      e.target.checked
-                        ? [...olderSeasonIds, season.id]
-                        : olderSeasonIds.filter((id) => id !== season.id),
-                    )
-                  }
-                />
-                {season.name}
-                {season.active ? " · aktuální" : ""}
-              </label>
-            ))}
-          </div>
-        </details>
-      )}
 
       {filteredEvents.length === 0 ? (
         <EmptyState
@@ -248,7 +252,11 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
               </div>
               <div className="events-list">
                 {[...future].reverse().map((event) => (
-                  <EventRow event={event} key={event.id} />
+                  <EventRow
+                    event={event}
+                    key={event.id}
+                    myMemberId={database.data.myMemberId}
+                  />
                 ))}
               </div>
             </section>
@@ -261,7 +269,11 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
               </div>
               <div className="events-list">
                 {past.map((event) => (
-                  <EventRow event={event} key={event.id} />
+                  <EventRow
+                    event={event}
+                    key={event.id}
+                    myMemberId={database.data.myMemberId}
+                  />
                 ))}
               </div>
             </section>
@@ -283,7 +295,13 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function EventRow({ event }: { event: EnsembleEvent }) {
+function EventRow({
+  event,
+  myMemberId,
+}: {
+  event: EnsembleEvent;
+  myMemberId?: string;
+}) {
   const yes = event.attendance.filter(
     (record) => record.interest === "yes",
   ).length;
@@ -292,8 +310,10 @@ function EventRow({ event }: { event: EnsembleEvent }) {
   ).length;
   const total = event.attendance.length;
   const closed = event.status === "closed";
-  const personalRecord =
-    event.attendanceScope === "self" ? event.attendance[0] : undefined;
+  const personalRecord = event.attendance.find(
+    (r) => r.memberId === myMemberId,
+  );
+  const started = eventHasStarted(event);
   const visibleCount = closed ? recorded : yes;
   const progress = total > 0 ? (100 * visibleCount) / total : 0;
 
@@ -326,38 +346,43 @@ function EventRow({ event }: { event: EnsembleEvent }) {
         <strong>{event.program || "Bude doplněno"}</strong>
       </span>
       <span className="event-row__attendance">
-        <span>
-          <UsersRound aria-hidden="true" />
-          {personalRecord ? (
-            <strong>
-              {closed
-                ? attendanceLabels[personalRecord.status]
-                : interestLabels[personalRecord.interest]}
-            </strong>
-          ) : total > 0 ? (
-            <>
-              <strong>{visibleCount}</strong> / {total}
-            </>
-          ) : (
-            <strong>—</strong>
-          )}
-        </span>
-        <small>
-          {personalRecord
-            ? closed
-              ? "moje docházka"
-              : "moje odpověď"
-            : total > 0
-              ? closed
-                ? "zapsaná docházka"
-                : "potvrzený zájem"
-              : "souhrn není zveřejněný"}
-        </small>
-        {!personalRecord ? (
-          <span className="progress">
-            <span style={{ width: `${progress}%` }} />
-          </span>
-        ) : null}
+        {personalRecord ? (
+          <>
+            <small>Moje odpověď</small>
+            <ResponseBadge response={personalRecord.interest} />
+            {started && personalRecord.status !== "unknown" && (
+              <small>
+                {attendanceLabels[personalRecord.status]}
+                {personalRecord.status === "partial"
+                  ? ` · ${personalRecord.attendancePercent} %`
+                  : ""}
+              </small>
+            )}
+            {started && personalRecord.status === "unknown" && (
+              <small>Účast zatím nepotvrzena</small>
+            )}
+          </>
+        ) : (
+          <>
+            <span>
+              <UsersRound aria-hidden="true" />
+              <strong>{total ? visibleCount : "—"}</strong>
+              {total > 0 && ` / ${total}`}
+            </span>
+            <small>
+              {total > 0
+                ? closed
+                  ? "zapsaná docházka"
+                  : "potvrzený zájem"
+                : "souhrn není zveřejněný"}
+            </small>
+            {total > 0 && (
+              <span className="progress">
+                <span style={{ width: `${progress}%` }} />
+              </span>
+            )}
+          </>
+        )}
       </span>
       <span className="event-row__arrow">
         <ChevronRight aria-hidden="true" />

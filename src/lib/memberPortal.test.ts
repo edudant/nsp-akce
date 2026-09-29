@@ -6,6 +6,7 @@ import type {
 } from "./domain";
 import {
   canRespondToEvent,
+  eventHasStarted,
   displayedAttendancePoints,
   groupEventPairs,
   recentAttendanceEntries,
@@ -124,4 +125,16 @@ describe("member portal helpers", () => {
       },
     ]);
   });
+});
+
+it("compares the actual start time in Prague and prefers server availability", () => {
+  const event = eventFixture({ date: "2026-10-02", startTime: "19:00" });
+  expect(eventHasStarted(event, new Date("2026-10-02T16:59:00Z"))).toBe(false);
+  expect(eventHasStarted(event, new Date("2026-10-02T17:00:00Z"))).toBe(true);
+  expect(
+    eventHasStarted(
+      { ...event, canClose: false },
+      new Date("2026-10-02T18:00:00Z"),
+    ),
+  ).toBe(false);
 });

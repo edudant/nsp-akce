@@ -6961,3 +6961,48 @@ tbody tr:hover {
 .compact-row > input[type=checkbox] { width: 22px; height: 22px; min-height: 22px; flex: 0 0 auto; margin-right: 10px; }
 .partner-wishes summary { font-weight: 600; cursor: pointer; }
 .event-overview > .feature-card { margin: 0; }
+/* Personal responses and compact event information. */
+.response-badge { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 7px 11px; font-size: .8rem; font-weight: 750; line-height: 1.25; }
+.response-badge svg { width: 17px; height: 17px; flex: 0 0 auto; }
+.response-badge--yes { color: #176247; background: #e2f3e8; }
+.response-badge--no { color: #a22b3e; background: #fae6e8; }
+.response-badge--maybe { color: #8c6318; background: #fbefce; }
+.response-badge--unset, .response-badge--substitute { color: var(--muted); background: var(--paper-soft); }
+.response-editor { display: grid; gap: 12px; margin: 14px 0; }
+.response-editor > .button { justify-self: start; }
+.choice-buttons { display: flex; flex-wrap: wrap; gap: 8px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.choice-buttons label { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 9px; color: var(--muted-strong); background: var(--paper-strong); font-size: .82rem; font-weight: 650; cursor: pointer; }
+.choice-buttons label.is-selected { border-color: var(--green-700); color: var(--green-900); background: #e2f3e8; box-shadow: inset 0 0 0 1px var(--green-700); }
+.choice-buttons label:has(input:focus-visible) { outline: 2px solid var(--green-700); outline-offset: 3px; }
+.choice-buttons:disabled label { cursor: not-allowed; opacity: .6; }
+.points-tag { display: inline-flex; align-items: center; gap: 5px; }
+.info-help { display: inline-block; position: relative; vertical-align: middle; }
+.info-help > button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 4px; color: var(--muted); cursor: pointer; list-style: none; border-radius: 50%; }
+.info-help > button { border: 0; background: transparent; }
+.info-help svg { width: 18px; height: 18px; }
+.info-help__content { display: block; position: absolute; right: 0; top: 100%; width: 300px; max-width: calc(100vw - 40px); padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--paper-strong); color: var(--ink); box-shadow: var(--shadow-sm); z-index: 40; font-size: .8rem; line-height: 1.5; }
+.info-help__content p { margin: 0 0 8px; }
+.info-help__content p:last-child { margin-bottom: 0; }
+.toolbar-card .season-filter { flex-basis: 100%; padding: 12px 0 0; margin-top: 12px; border-top: 1px solid var(--border-soft); font-size: .8rem; }
+.event-back { max-width: 100%; width: fit-content; white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
+.my-attendance-card > .response-badge { font-size: 1rem; padding: 10px 15px; }
+.my-attendance-card h3 { font-size: .9rem; }
+.participant-detail { display: flex; flex-direction: column; }
+.participant-detail--actual .participant-detail-actual { order: -1; }
+@media (max-width: 600px) {
+ .info-help__content { position: fixed; inset: auto 20px 84px; width: auto; max-width: none; }
+ .event-row__attendance .response-badge { font-size: .8rem; }
+ .choice-buttons label { flex: 1 1 105px; }
+ .response-editor > .button { width: 100%; }
+}
+
+.choice-buttons label > svg { width: 17px; height: 17px; flex: 0 0 auto; }
+.choice-buttons .choice--no.is-selected, .choice-buttons .choice--absent.is-selected { color: #a22b3e; border-color: #a22b3e; background: #fae6e8; box-shadow: inset 0 0 0 1px #a22b3e; }
+.choice-buttons .choice--maybe.is-selected, .choice-buttons .choice--partial.is-selected { color: #8c6318; border-color: #a77a28; background: #fbefce; box-shadow: inset 0 0 0 1px #a77a28; }
+.attendance-view-label { font-weight: 750; margin: 6px 0; }
+.attendance-prefill-hint { font-size: .8rem; color: var(--muted); }
+
+.events-toolbar { flex-wrap: wrap; }
+@media (max-width: 600px) { .events-toolbar .season-filter { flex-basis: auto; margin-top: 0; } }
+
+.event-status-info { display: inline-flex; align-items: center; gap: 4px; }
