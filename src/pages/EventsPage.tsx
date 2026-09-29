@@ -54,6 +54,7 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<EventFilter>("all");
   const [search, setSearch] = useState("");
+  const [olderSeasonIds, setOlderSeasonIds] = useState<string[]>([]);
   const [view, setView] = useState<"list" | "calendar">("list");
   const [createOpen, setCreateOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() =>
@@ -72,6 +73,15 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
   const filteredEvents = useMemo(() => {
     if (!database.data) return [];
     return [...database.data.events]
+      .filter(
+        (event) =>
+          !database.data?.seasons?.length ||
+          database.data.seasons.some(
+            (s) =>
+              s.id === event.seasonId &&
+              (s.active || olderSeasonIds.includes(s.id)),
+          ),
+      )
       .filter((event) => filter === "all" || event.type === filter)
       .filter((event) => {
         const term = search.trim().toLocaleLowerCase("cs");
@@ -81,7 +91,7 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
           .includes(term);
       })
       .sort((first, second) => second.date.localeCompare(first.date));
-  }, [database.data, filter, search]);
+  }, [database.data, filter, search, olderSeasonIds]);
 
   if (database.isLoading) return <LoadingState label="Načítám akce…" />;
   if (database.isError || !database.data) {
@@ -103,8 +113,11 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
             </Button>
           ) : null
         }
-        description="Plánujte zkoušky a vystoupení, sbírejte zájem a zapisujte účast."
-        eyebrow="Letní sezona 2026"
+        description={
+          canEdit
+            ? "Plánujte zkoušky a vystoupení a zapisujte účast."
+            : undefined
+        }
         title="Akce"
       />
 
@@ -129,7 +142,14 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
               <span>
                 {
                   database.data.events.filter(
-                    (event) => value === "all" || event.type === value,
+                    (event) =>
+                      (value === "all" || event.type === value) &&
+                      (!database.data.seasons?.length ||
+                        database.data.seasons.some(
+                          (s) =>
+                            s.id === event.seasonId &&
+                            (s.active || olderSeasonIds.includes(s.id)),
+                        )),
                   ).length
                 }
               </span>
@@ -170,6 +190,35 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
         </div>
       </Card>
 
+      {!!database.data.seasons?.length && (
+        <details className="season-filter card">
+          <summary>
+            Sezóny: aktuální taneční a koledy
+            {olderSeasonIds.length ? ` + ${olderSeasonIds.length} starší` : ""}
+          </summary>
+          <div className="standing-picker">
+            {database.data.seasons.map((season) => (
+              <label key={season.id}>
+                <input
+                  type="checkbox"
+                  checked={season.active || olderSeasonIds.includes(season.id)}
+                  disabled={season.active}
+                  onChange={(e) =>
+                    setOlderSeasonIds(
+                      e.target.checked
+                        ? [...olderSeasonIds, season.id]
+                        : olderSeasonIds.filter((id) => id !== season.id),
+                    )
+                  }
+                />
+                {season.name}
+                {season.active ? " · aktuální" : ""}
+              </label>
+            ))}
+          </div>
+        </details>
+      )}
+
       {filteredEvents.length === 0 ? (
         <EmptyState
           action={
@@ -190,7 +239,7 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
           onMonthChange={setCalendarMonth}
         />
       ) : (
-        <div className="event-sections">
+        <div className="event-list-sections">
           {future.length ? (
             <section>
               <div className="section-heading">
@@ -198,7 +247,7 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
                 <Badge tone="blue">{future.length}</Badge>
               </div>
               <div className="events-list">
-                {future.map((event) => (
+                {[...future].reverse().map((event) => (
                   <EventRow event={event} key={event.id} />
                 ))}
               </div>

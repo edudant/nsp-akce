@@ -1,3 +1,4 @@
+import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
@@ -15,9 +16,9 @@ import {
 } from "../lib/ensembleRules";
 import { appApi } from "../lib/dataApi";
 import { databaseQueryKey } from "./DataContext";
-import { Button, Card, Dialog, Select, Badge } from "./Ui";
+import { Button, Card, Dialog, Select, Badge, IconButton } from "./Ui";
 import { ListHeader, ListRow } from "./CompactList";
-import { EventAudit } from "./EventAudit";
+import { AuditDisclosure } from "./EventAudit";
 import { formatAuditTime } from "./formatters";
 import { Help } from "./Help";
 export function ResponseEditor({
@@ -41,6 +42,7 @@ export function ResponseEditor({
       className="feature-toolbar"
       onSubmit={(e) => {
         e.preventDefault();
+        if (response === "maybe" && !note.trim()) return;
         onSave(response, note);
       }}
     >
@@ -53,11 +55,9 @@ export function ResponseEditor({
         <option value="unset">Bez odpovědi</option>
         <option value="yes">Ano</option>
         <option value="no">Ne</option>
-        {event.type === "performance" && (
-          <option value="maybe">Zatím nevím</option>
-        )}
+        <option value="maybe">Zatím nevím</option>
       </Select>
-      {event.type === "performance" && (
+      {(response === "maybe" || event.type === "performance" || !!note) && (
         <input
           aria-label="Poznámka k odpovědi"
           placeholder={response === "maybe" ? "Povinná poznámka" : "Poznámka"}
@@ -84,6 +84,8 @@ export function AttendancePanel({
   admin: boolean;
 }) {
   const query = useQueryClient();
+  const [quickId, setQuickId] = useState<string | null>(null);
+  const [addIds, setAddIds] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState("");
   const [addSearch, setAddSearch] = useState("");
@@ -104,6 +106,23 @@ export function AttendancePanel({
         query.invalidateQueries({ queryKey: ["event-audit"] }),
         query.invalidateQueries({ queryKey: ["scores"] }),
       ]);
+    },
+  });
+  const batchAdd = useMutation({
+    mutationFn: async (ids: string[]) => {
+      for (const memberId of ids) {
+        await appApi.updateAttendance(event.id, memberId, {
+          selected: true,
+          status: "present",
+        });
+        setAddIds((current) => current.filter((id) => id !== memberId));
+      }
+    },
+    onSettled: async (_, error) => {
+      await query.invalidateQueries({ queryKey: databaseQueryKey });
+      await query.invalidateQueries({ queryKey: ["event-audit"] });
+      await query.invalidateQueries({ queryKey: ["scores"] });
+      if (!error) setAdding(false);
     },
   });
   const relevant = (r: AttendanceRecord) =>
@@ -176,28 +195,31 @@ export function AttendancePanel({
             ? () => {
                 setAdding(true);
                 setAddSearch("");
+                setAddIds([]);
               }
             : undefined
         }
       />
-      <Help title="Výběr a skutečná účast">
-        <p>
-          Přidání člena rovnou zapíše plnou účast a vybere jej pro párování.
-          Rychlou volbou změníte skutečnou účast; procenta, odpověď a historii
-          najdete po kliknutí na jméno. Nepřítomní a omluvení se do generátoru
-          nevybírají.
-        </p>
-        <p>
-          Uzavření převezme Ano jako přítomen a Ne jako nepřítomen pouze u
-          nezapsané účasti. Zatím nevím a chybějící odpověď zůstanou nezapsané.
-          Ruční záznam správce se nepřepisuje. Původní odpověď člena i všechny
-          opravy jsou v auditu.
-        </p>
-        <p>
-          Aktivita řadí podle absolvovaných zkoušek v sezóně, poslední účasti a
-          jména.
-        </p>
-      </Help>
+      {admin && (
+        <Help title="Výběr a skutečná účast">
+          <p>
+            Přidání člena rovnou zapíše plnou účast a vybere jej pro párování.
+            Rychlou volbou změníte skutečnou účast; procenta, odpověď a historii
+            najdete po kliknutí na jméno. Nepřítomní a omluvení se do generátoru
+            nevybírají.
+          </p>
+          <p>
+            Uzavření převezme Ano jako přítomen a Ne jako nepřítomen pouze u
+            nezapsané účasti. Zatím nevím a chybějící odpověď zůstanou
+            nezapsané. Ruční záznam správce se nepřepisuje. Původní odpověď
+            člena i všechny opravy jsou v auditu.
+          </p>
+          <p>
+            Aktivita řadí podle absolvovaných zkoušek v sezóně, poslední účasti
+            a jména.
+          </p>
+        </Help>
+      )}
       <div className="feature-toolbar">
         <input
           aria-label="Hledat účastníka"
@@ -251,23 +273,22 @@ export function AttendancePanel({
                 </>
               }
               meta={
-                !admin ? (
-                  <Badge>
-                    {attendanceLabels[record.status]}
-                    {record.status === "partial" &&
-                      ` ${record.attendancePercent} %`}
-                  </Badge>
-                ) : undefined
+                <Badge>
+                  {attendanceLabels[record.status]}
+                  {record.status === "partial" &&
+                    ` ${record.attendancePercent} %`}
+                </Badge>
               }
               onOpen={() => setDetailId(member.id)}
             >
               {admin && (
-                <>
-                  {attendanceSelect(member, record)}
-                  {record.status === "partial" && (
-                    <small>{record.attendancePercent ?? 50} %</small>
-                  )}
-                </>
+                <IconButton
+                  label={`Nastavit účast ${member.fullName}`}
+                  disabled={update.isPending}
+                  onClick={() => setQuickId(member.id)}
+                >
+                  <MoreHorizontal aria-hidden="true" />
+                </IconButton>
               )}
             </ListRow>
           );
@@ -284,126 +305,179 @@ export function AttendancePanel({
         </p>
       )}
       <Dialog
+        title="Nastavit skutečnou účast"
+        open={!!quickId}
+        onClose={() => setQuickId(null)}
+        size="small"
+      >
+        <div className="attendance-menu">
+          {(
+            ["present", "partial", "absent", "excused", "unknown"] as const
+          ).map((value) => (
+            <Button
+              variant="secondary"
+              key={value}
+              disabled={update.isPending}
+              onClick={() => {
+                setAttendance(quickId!, value);
+                setQuickId(null);
+              }}
+            >
+              {attendanceLabels[value]}
+            </Button>
+          ))}
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setDetailId(quickId);
+              setQuickId(null);
+            }}
+          >
+            Otevřít detail a procenta
+          </Button>
+        </div>
+      </Dialog>
+      <Dialog
         open={!!detailMember && !!detailRecord}
         title={detailMember?.fullName ?? "Detail účastníka"}
         onClose={() => setDetailId(null)}
       >
         {detailMember && detailRecord && (
           <>
-            <p>
-              {memberActivity(db, detailMember.id, event.seasonId).count}{" "}
-              absolvovaných zkoušek v sezóně
-            </p>
-            {detailRecord.memberResponse && (
-              <p>
-                <strong>Původní odpověď člena:</strong>{" "}
-                {interestLabels[detailRecord.memberResponse.interest]} ·{" "}
-                {formatAuditTime(detailRecord.memberResponse.at)}
-                {detailRecord.memberResponse.note &&
-                  ` · ${detailRecord.memberResponse.note}`}
-              </p>
-            )}
-            {detailRecord.adminResponse && (
-              <p>
-                <strong>Poslední odpověď správce:</strong>{" "}
-                {interestLabels[detailRecord.adminResponse.interest]} ·{" "}
-                {formatAuditTime(detailRecord.adminResponse.at)}
-                {detailRecord.adminResponse.note &&
-                  ` · ${detailRecord.adminResponse.note}`}
-              </p>
-            )}
-            <h3>Aktuální odpověď</h3>
-            {admin ? (
-              <ResponseEditor
-                key={`${detailId}:${detailRecord.interest}:${detailRecord.note}`}
-                event={event}
-                record={detailRecord}
-                admin
-                pending={update.isPending}
-                onSave={(interest, note) =>
-                  update.mutate({
-                    memberId: detailMember.id,
-                    patch: { interest, note },
-                  })
-                }
-              />
-            ) : (
-              <p>
-                {interestLabels[detailRecord.interest]}
-                {detailRecord.note && ` · ${detailRecord.note}`}
-              </p>
-            )}
-            <h3>Skutečná účast</h3>
-            {admin ? (
-              <>
-                {attendanceSelect(detailMember, detailRecord)}
-                {detailRecord.status === "partial" && (
-                  <label className="field">
-                    Účast %
-                    <input
-                      aria-label={`Procento účasti ${detailMember.fullName}`}
-                      disabled={update.isPending}
-                      type="number"
-                      min="0.001"
-                      max="99.999"
-                      step="0.001"
-                      defaultValue={detailRecord.attendancePercent ?? 50}
-                      onBlur={(e) => {
-                        if (
-                          e.target.checkValidity() &&
-                          Number(e.target.value) !==
-                            detailRecord.attendancePercent
-                        )
-                          update.mutate({
-                            memberId: detailMember.id,
-                            patch: {
-                              status: "partial",
-                              attendancePercent: Number(e.target.value),
-                            },
-                          });
-                      }}
-                    />
-                  </label>
-                )}
-                <p>Změny skutečné účasti se ukládají ihned.</p>
-                <Button
-                  variant="ghost"
-                  disabled={update.isPending}
-                  onClick={() => {
+            <section className="participant-detail-section">
+              <h3>Nahlášená účast</h3>
+              {admin ? (
+                <ResponseEditor
+                  key={`${detailId}:${detailRecord.interest}:${detailRecord.note}`}
+                  event={event}
+                  record={detailRecord}
+                  admin
+                  pending={update.isPending}
+                  onSave={(interest, note) =>
                     update.mutate({
                       memberId: detailMember.id,
-                      patch: { selected: false, status: "absent" },
-                    });
-                    setDetailId(null);
-                  }}
-                >
-                  Odebrat z účasti
-                </Button>
-                {event.type === "performance" &&
-                  event.seasonKind !== "carols" && (
-                    <AdminWishes
-                      key={JSON.stringify(
-                        db.partnerWishes?.filter(
-                          (w) =>
-                            w.memberId === detailMember.id &&
-                            w.eventId === event.id,
-                        ),
-                      )}
-                      db={db}
-                      event={event}
-                      member={detailMember}
-                    />
-                  )}
-              </>
-            ) : (
+                      patch: { interest, note },
+                    })
+                  }
+                />
+              ) : (
+                <p>
+                  {interestLabels[detailRecord.interest]}
+                  {detailRecord.note && ` · ${detailRecord.note}`}
+                </p>
+              )}
+            </section>
+            <section className="participant-detail-section">
+              <h3>Skutečná účast a body</h3>
               <p>
-                {attendanceLabels[detailRecord.status]}
-                {detailRecord.status === "partial" &&
-                  ` ${detailRecord.attendancePercent} %`}
+                <Badge>
+                  {attendanceLabels[detailRecord.status]}
+                  {detailRecord.status === "partial"
+                    ? ` · ${detailRecord.attendancePercent} %`
+                    : ""}
+                </Badge>{" "}
+                · {detailRecord.earnedPoints ?? 0} bodů
               </p>
-            )}
+              {admin ? (
+                <>
+                  {attendanceSelect(detailMember, detailRecord)}
+                  {detailRecord.status === "partial" && (
+                    <label className="field">
+                      Účast %
+                      <input
+                        aria-label={`Procento účasti ${detailMember.fullName}`}
+                        disabled={update.isPending}
+                        type="number"
+                        min="0.001"
+                        max="99.999"
+                        step="0.001"
+                        defaultValue={detailRecord.attendancePercent ?? 50}
+                        onBlur={(e) => {
+                          if (
+                            e.target.checkValidity() &&
+                            Number(e.target.value) !==
+                              detailRecord.attendancePercent
+                          )
+                            update.mutate({
+                              memberId: detailMember.id,
+                              patch: {
+                                status: "partial",
+                                attendancePercent: Number(e.target.value),
+                              },
+                            });
+                        }}
+                      />
+                    </label>
+                  )}
+                  <p>Změny skutečné účasti se ukládají ihned.</p>
+                  <Button
+                    variant="ghost"
+                    disabled={update.isPending}
+                    onClick={() => {
+                      update.mutate({
+                        memberId: detailMember.id,
+                        patch: { selected: false, status: "absent" },
+                      });
+                      setDetailId(null);
+                    }}
+                  >
+                    Odebrat z účasti
+                  </Button>
+                  {event.type === "performance" &&
+                    event.seasonKind !== "carols" && (
+                      <AdminWishes
+                        key={JSON.stringify(
+                          db.partnerWishes?.filter(
+                            (w) =>
+                              w.memberId === detailMember.id &&
+                              w.eventId === event.id,
+                          ),
+                        )}
+                        db={db}
+                        event={event}
+                        member={detailMember}
+                      />
+                    )}
+                </>
+              ) : (
+                <p>
+                  {attendanceLabels[detailRecord.status]}
+                  {detailRecord.status === "partial" &&
+                    ` ${detailRecord.attendancePercent} %`}
+                </p>
+              )}
+            </section>
+            <details className="participant-response-history">
+              <summary>Odpovědi a aktivita</summary>{" "}
+              <p>
+                {memberActivity(db, detailMember.id, event.seasonId).count}{" "}
+                absolvovaných zkoušek v sezóně
+              </p>
+              {detailRecord.memberResponse && (
+                <p>
+                  <strong>Původní odpověď člena:</strong>{" "}
+                  {interestLabels[detailRecord.memberResponse.interest]} ·{" "}
+                  {formatAuditTime(detailRecord.memberResponse.at)}
+                  {detailRecord.memberResponse.note &&
+                    ` · ${detailRecord.memberResponse.note}`}
+                </p>
+              )}
+              {detailRecord.adminResponse && (
+                <p>
+                  <strong>Poslední odpověď správce:</strong>{" "}
+                  {interestLabels[detailRecord.adminResponse.interest]} ·{" "}
+                  {formatAuditTime(detailRecord.adminResponse.at)}
+                  {detailRecord.adminResponse.note &&
+                    ` · ${detailRecord.adminResponse.note}`}
+                </p>
+              )}
+            </details>
             {(admin || detailMember.id === db.myMemberId) && (
-              <EventAudit eventId={event.id} memberId={detailMember.id} />
+              <AuditDisclosure
+                eventId={event.id}
+                memberId={detailMember.id}
+                title="Historie změn účasti"
+              />
             )}
           </>
         )}
@@ -433,7 +507,7 @@ export function AttendancePanel({
           </div>
           <div className="compact-list">
             {available.map((m) => (
-              <div className="compact-row" key={m.id}>
+              <label className="compact-row" key={m.id}>
                 <span className="compact-row__text">
                   <strong>{m.fullName}</strong>
                   <small>
@@ -446,21 +520,34 @@ export function AttendancePanel({
                     }
                   </small>
                 </span>
-                <Button
-                  size="small"
-                  disabled={update.isPending}
-                  onClick={() =>
-                    update.mutate({
-                      memberId: m.id,
-                      patch: { selected: true, status: "present" },
-                    })
+                <input
+                  type="checkbox"
+                  aria-label={`Vybrat ${m.fullName}`}
+                  checked={addIds.includes(m.id)}
+                  disabled={batchAdd.isPending}
+                  onChange={(e) =>
+                    setAddIds(
+                      e.target.checked
+                        ? [...addIds, m.id]
+                        : addIds.filter((id) => id !== m.id),
+                    )
                   }
-                >
-                  Přidat
-                </Button>
-              </div>
+                />
+              </label>
             ))}
           </div>
+          <Button
+            disabled={!addIds.length}
+            loading={batchAdd.isPending}
+            onClick={() => batchAdd.mutate(addIds)}
+          >
+            Přidat vybrané ({addIds.length})
+          </Button>
+          {batchAdd.error && (
+            <p role="alert" className="form-error">
+              {batchAdd.error.message}
+            </p>
+          )}
           {update.error && (
             <p role="alert" className="form-error">
               {update.error.message}

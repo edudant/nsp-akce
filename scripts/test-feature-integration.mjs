@@ -208,10 +208,47 @@ try {
     await rpc(member, "response", {
       id: rehearsal,
       interest: "maybe",
-      note: "No",
+      note: "  ",
     }),
   );
-  pass("Rehearsal allows only yes/no and remains open after start");
+  fail(
+    await rpc(member, "response", { id: rehearsal, interest: "substitute" }),
+  );
+  ok(
+    await rpc(member, "response", {
+      id: rehearsal,
+      interest: "maybe",
+      note: "Waiting for work schedule",
+    }),
+  );
+  assert.equal(
+    (await db(member)).events
+      .find((e) => e.id === rehearsal)
+      .attendance.find((r) => r.memberId === members[1].id).interest,
+    "maybe",
+  );
+  ok(await rpc(member, "response", { id: rehearsal, interest: "yes" }));
+  pass(
+    "Rehearsal accepts reasoned maybe, rejects substitute and remains open after start",
+  );
+  ok(
+    await admin.rpc("update_event_program", {
+      target_event_id: rehearsal,
+      program_items: [{ customName: "Rehearsal program" }],
+    }),
+  );
+  assert.equal(
+    (await db(member)).events.find((e) => e.id === rehearsal).programItems[0]
+      .name,
+    "Rehearsal program",
+  );
+  fail(
+    await member.rpc("update_event_program", {
+      target_event_id: rehearsal,
+      program_items: [],
+    }),
+  );
+  pass("Rehearsal program can be edited by admin and read by members");
   ok(
     await rpc(admin, "attendance", {
       id: rehearsal,

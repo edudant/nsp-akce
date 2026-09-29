@@ -89,7 +89,7 @@ try {
   assert.equal(
     await admin
       .getByRole("dialog")
-      .getByRole("button", { name: "Přidat", exact: true })
+      .getByRole("checkbox", { name: /^Vybrat / })
       .count(),
     1,
   );
@@ -99,6 +99,29 @@ try {
     .click();
   await admin.getByLabel("Řazení účastníků").selectOption("name");
   pass("Compact selected roster, adding search and name sorting");
+  await admin.setViewportSize({ width: 390, height: 844 });
+  await admin
+    .getByRole("button", { name: "Upravit akci", exact: true })
+    .click();
+  const eventName = admin.getByRole("dialog").getByLabel("Název akce");
+  await eventName.fill("");
+  await eventName.pressSequentially("Mobilní editace akce", { delay: 20 });
+  assert.equal(await eventName.inputValue(), "Mobilní editace akce");
+  assert.equal(
+    await eventName.evaluate((element) => element === document.activeElement),
+    true,
+  );
+  await admin.screenshot({
+    path: screenshotDir + "/action-dialog-mobile.png",
+    fullPage: true,
+  });
+  await admin
+    .getByRole("dialog")
+    .getByRole("button", { name: "Zavřít", exact: true })
+    .click();
+  await admin.setViewportSize({ width: 1440, height: 1000 });
+  pass("Mobile event dialog keeps focus through every typed character");
+
   await go(admin, "/clenove", "Členové");
   await admin
     .getByRole("button", { name: "Upravit člena " + own.fullName, exact: true })
@@ -179,21 +202,27 @@ try {
   );
   await go(member, route, title);
   assert.equal(await member.getByLabel("Odpověď").isDisabled(), false);
+  await member.getByText("Vybrat přání partnerů", { exact: true }).click();
   assert.equal(
     await member
       .getByRole("button", { name: "Uložit přání", exact: true })
       .count(),
     1,
   );
-  await member.getByRole("tab", { name: "Účastníci", exact: true }).click();
-  assert.ok(
-    (await member.locator("body").innerText()).includes(
-      "Seznam odpovědí ostatních",
-    ),
+  assert.equal(
+    await member.getByRole("tab", { name: "Účastníci", exact: true }).count(),
+    0,
   );
-  await member
-    .getByRole("tab", { name: "Detail a moje účast", exact: true })
-    .click();
+  assert.equal(
+    await member.getByRole("tab", { name: "Páry", exact: true }).count(),
+    0,
+  );
+  assert.equal(
+    await member
+      .getByRole("tab", { name: "Pásma a písně", exact: true })
+      .count(),
+    0,
+  );
   await member.getByLabel("Odpověď").selectOption("maybe");
   assert.equal(
     await member.getByLabel("Poznámka k odpovědi").getAttribute("required"),
@@ -210,17 +239,14 @@ try {
     await admin.getByLabel("Hledat člena k přidání").fill(m.fullName);
     await admin
       .getByRole("dialog")
-      .getByRole("button", { name: "Přidat", exact: true })
-      .click();
-    await admin
-      .getByRole("dialog")
-      .getByRole("button", { name: "Přidat", exact: true })
-      .waitFor({ state: "hidden" });
+      .getByRole("checkbox", { name: "Vybrat " + m.fullName, exact: true })
+      .check();
   }
   await admin
     .getByRole("dialog")
-    .getByRole("button", { name: "Zavřít", exact: true })
+    .getByRole("button", { name: /Přidat vybrané/ })
     .click();
+  await admin.getByRole("dialog").waitFor({ state: "hidden" });
   await admin
     .getByRole("link", { name: "Generátor párů", exact: true })
     .click();
@@ -249,7 +275,7 @@ try {
     "Performance sliders, directional wishes, main/below-line pairs, manual editor, draft and publication",
   );
   await go(admin, route, title);
-  await admin.getByRole("tab", { name: "Pásma", exact: true }).click();
+  await admin.getByRole("tab", { name: "Pásma a písně", exact: true }).click();
   await admin.getByLabel("Název nové série").fill("Browser songs");
   await admin.getByRole("button", { name: "Vytvořit sérii" }).click();
   const series = admin.locator(".song-series").filter({
@@ -266,7 +292,12 @@ try {
   await admin.getByLabel("Název série Browser songs").waitFor();
   await member.reload();
   await member.getByRole("heading", { name: title, exact: true }).waitFor();
-  await member.getByRole("tab", { name: "Pásma", exact: true }).click();
+  assert.equal(
+    await member
+      .getByRole("tab", { name: "Pásma a písně", exact: true })
+      .count(),
+    0,
+  );
   assert.equal(
     await member.getByText("Browser songs", { exact: false }).count(),
     0,
@@ -279,7 +310,7 @@ try {
     .getByRole("heading", { name: "Browser songs · Potvrzená", exact: true })
     .waitFor();
   await member.reload();
-  await member.getByRole("tab", { name: "Pásma", exact: true }).click();
+  await member.getByRole("tab", { name: "Pásma a písně", exact: true }).click();
   await member
     .getByRole("heading", { name: "Browser songs · Potvrzená", exact: true })
     .waitFor();
@@ -307,8 +338,10 @@ try {
     .getByRole("button", { name: "Uzavřít akci", exact: true })
     .waitFor();
   await member.reload();
-  await member.getByLabel("Odpověď").waitFor();
-  assert.equal(await member.getByLabel("Odpověď").isDisabled(), true);
+  assert.equal(await member.getByLabel("Odpověď").count(), 0);
+  await member
+    .getByText("Odpovědi jsou uzamčené. Změnu zadá admin.", { exact: true })
+    .waitFor();
   await member.getByRole("tab", { name: "Účastníci", exact: true }).click();
   await member.getByRole("heading", { name: /Účastníci \(4\)/ }).waitFor();
   pass("Confirmation exposes roster and locks member response");
@@ -337,9 +370,6 @@ try {
   await admin
     .getByRole("button", { name: "Znovu otevřít akci", exact: true })
     .waitFor();
-  await admin
-    .getByRole("tab", { name: "Detail a moje účast", exact: true })
-    .click();
   await admin.getByText("Audit akce", { exact: true }).click();
   await admin.locator(".audit-list li").first().waitFor();
   assert.ok(
@@ -356,8 +386,15 @@ try {
   );
   await admin.getByRole("tab", { name: "Účastníci", exact: true }).click();
   await admin
-    .getByLabel("Skutečná účast " + own.fullName)
-    .selectOption("partial");
+    .getByRole("button", {
+      name: "Nastavit účast " + own.fullName,
+      exact: true,
+    })
+    .click();
+  await admin
+    .getByRole("dialog")
+    .getByRole("button", { name: "Částečně", exact: true })
+    .click();
   await admin
     .getByRole("button", { name: "Detail: " + own.fullName, exact: true })
     .click();
@@ -387,6 +424,10 @@ try {
     await admin.getByLabel("Procento účasti " + own.fullName).inputValue(),
     "62.5",
   );
+  await admin
+    .getByRole("dialog")
+    .getByText("Historie změn účasti", { exact: true })
+    .click();
   await admin
     .getByRole("dialog")
     .getByRole("heading", { name: "Historie změn", exact: true })
@@ -431,12 +472,13 @@ try {
   await member
     .getByRole("heading", { name: "Uložené sady párů", exact: true })
     .waitFor();
-  await member.waitForFunction(
-    () =>
-      Array.from(document.querySelectorAll("h3")).filter((h) =>
-        h.textContent?.includes("Zveřejněná"),
-      ).length >= 3,
-  );
+  const sets = member.getByLabel("Uložená sada párů");
+  assert.ok((await sets.getByRole("option").count()) >= 3);
+  const last = await sets.inputValue();
+  const older = await sets.getByRole("option").nth(1).getAttribute("value");
+  await sets.selectOption(older);
+  assert.notEqual(await sets.inputValue(), last);
+  await sets.selectOption(last);
   pass("Random rehearsal generator publishes an additional visible set");
   await go(admin, "/nastaveni/pisne", "Písně");
   await admin.getByLabel("Hledat píseň").fill("Trumpetří");
@@ -509,7 +551,7 @@ try {
       .count(),
     0,
   );
-  await admin.getByRole("tab", { name: "Pásma", exact: true }).click();
+  await admin.getByRole("tab", { name: "Pásma a písně", exact: true }).click();
   await admin
     .getByRole("heading", { name: "Browser songs · Potvrzená", exact: true })
     .waitFor();
@@ -567,7 +609,7 @@ try {
   await shared.getByRole("button", { name: /Otevřít členský přehled/ }).click();
   await shared.locator(".app-layout").waitFor();
   await go(shared, route, title);
-  await shared.getByRole("tab", { name: "Pásma", exact: true }).click();
+  await shared.getByRole("tab", { name: "Pásma a písně", exact: true }).click();
   await shared
     .getByRole("heading", { name: "Browser songs · Potvrzená" })
     .waitFor();

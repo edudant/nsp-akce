@@ -1,10 +1,4 @@
-import {
-  AlertCircle,
-  Check,
-  ChevronDown,
-  LoaderCircle,
-  X,
-} from "lucide-react";
+import { AlertCircle, Check, ChevronDown, LoaderCircle, X } from "lucide-react";
 import {
   type ButtonHTMLAttributes,
   type HTMLAttributes,
@@ -94,13 +88,7 @@ export function Avatar({
   );
 }
 
-type BadgeTone =
-  | "neutral"
-  | "green"
-  | "red"
-  | "amber"
-  | "blue"
-  | "purple";
+type BadgeTone = "neutral" | "green" | "red" | "amber" | "blue" | "purple";
 
 export function Badge({
   tone = "neutral",
@@ -213,7 +201,10 @@ export function Toggle({
 }) {
   const id = useId();
   return (
-    <label className={`toggle-row ${disabled ? "is-disabled" : ""}`} htmlFor={id}>
+    <label
+      className={`toggle-row ${disabled ? "is-disabled" : ""}`}
+      htmlFor={id}
+    >
       <span>
         <strong>{label}</strong>
         {description ? <small>{description}</small> : null}
@@ -252,20 +243,25 @@ export function Dialog({
   size?: "small" | "medium" | "large";
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
-    dialogRef.current?.focus();
+    if (!dialogRef.current?.contains(document.activeElement))
+      dialogRef.current?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") closeRef.current();
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       previous?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -290,9 +286,7 @@ export function Dialog({
           <div>
             <span className="eyebrow">Národopisný soubor Postřekov</span>
             <h2>{title}</h2>
-            {description ? (
-              <p id="dialog-description">{description}</p>
-            ) : null}
+            {description ? <p id="dialog-description">{description}</p> : null}
           </div>
           <IconButton label="Zavřít" onClick={onClose}>
             <X aria-hidden="true" />

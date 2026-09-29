@@ -10,6 +10,8 @@ import {
   Dialog,
   EventStatusBadge,
   EventTypeBadge,
+  Badge,
+  Select,
 } from "../components/Ui";
 import { AuditDisclosure } from "../components/EventAudit";
 import { EventStateActions } from "../components/EventStateActions";
@@ -20,6 +22,7 @@ import { EventProgramEditor } from "../components/EventProgramEditor";
 import { SongSeriesPanel } from "../components/SongSeriesPanel";
 import { AppLink } from "../components/Router";
 import { compatibleMembers } from "../lib/ensembleRules";
+import { formatDate, formatAuditTime } from "../components/formatters";
 import { attendanceLabels, interestLabels } from "../lib/domain";
 import type {
   AppDatabase,
@@ -71,6 +74,7 @@ function EventContent({
   const [section, setSection] = useState<
     "detail" | "participants" | "pairs" | "program"
   >("detail");
+  const [pairSetId, setPairSetId] = useState("");
   const [wishes, setWishes] = useState(
     (db.partnerWishes ?? [])
       .filter((w) => w.eventId === event.id && w.memberId === db.myMemberId)
@@ -122,13 +126,50 @@ function EventContent({
   const member = db.members.find((m) => m.id === db.myMemberId);
   const myRecord = event.attendance.find((r) => r.memberId === db.myMemberId);
   const dance = event.seasonKind !== "carols";
+  const pairSets = [...(event.pairSets ?? [])]
+    .filter((s) => admin || s.published)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const selectedPairSet =
+    pairSets.find((s) => s.id === pairSetId) ?? pairSets[0];
+  const hasPairs =
+    dance &&
+    (event.type === "rehearsal"
+      ? pairSets.some((s) => s.pairs.length)
+      : event.pairs.length > 0);
+  const hasProgram = !!(
+    event.programItems?.length ||
+    event.program ||
+    event.songSeries?.some((s) => s.confirmed)
+  );
+  const sections = [
+    ...(event.attendanceScope === "all"
+      ? [{ id: "participants", label: "Účastníci" }]
+      : []),
+    ...(hasPairs || (admin && dance) ? [{ id: "pairs", label: "Páry" }] : []),
+    ...(admin || hasProgram ? [{ id: "program", label: "Pásma a písně" }] : []),
+  ];
+  const activeSection = sections.some((s) => s.id === section)
+    ? section
+    : sections[0]?.id;
   return (
     <div className="page">
-      <AppLink to="/udalosti">← Akce</AppLink>
-      <PageHeader
-        title={event.title}
-        description={`${event.date} · ${event.startTime}–${event.endTime} · ${event.location}`}
-      />
+      <AppLink className="button button--secondary event-back" to="/udalosti">
+        ← Zpět na seznam akcí
+      </AppLink>
+      <Card className="event-hero">
+        <div className={`event-date event-date--${event.type}`}>
+          <strong>{formatDate(event.date, "d")}</strong>
+          <small>{formatDate(event.date, "MMM")}</small>
+          <em>{formatDate(event.date, "EEE")}</em>
+        </div>
+        <div className="event-hero__copy">
+          <PageHeader
+            title={event.title}
+            description={`${formatDate(event.date)} · ${event.startTime}–${event.endTime} · ${event.location}`}
+          />
+          {event.note && <p className="event-hero__note">{event.note}</p>}
+        </div>
+      </Card>
       <div className="feature-toolbar">
         <EventTypeBadge type={event.type} />
         <EventStatusBadge status={event.status} />
@@ -154,34 +195,12 @@ function EventContent({
           </AppLink>
         )}
       </div>
-      <div className="event-sections" role="tablist" aria-label="Sekce akce">
-        {(
-          [
-            { id: "detail", label: "Detail a moje účast" },
-            { id: "participants", label: "Účastníci" },
-            ...(dance ? [{ id: "pairs", label: "Páry" }] : []),
-            { id: "program", label: "Pásma" },
-          ] as const
-        ).map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            id={`tab-${item.id}`}
-            aria-controls={`panel-${item.id}`}
-            aria-selected={section === item.id}
-            onClick={() => setSection(item.id as typeof section)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-      {section === "detail" && (
-        <section role="tabpanel" id="panel-detail" aria-labelledby="tab-detail">
+      {
+        <section className="event-overview" aria-label="Detail a moje účast">
           <Help title="Stavy akce a odpovědi">
             <p>
               {event.type === "rehearsal"
-                ? "Na zkoušku odpovídáte ano/ne, dokud ji admin neuzavře. Při uzavření po začátku se skutečná účast předvyplní podle odpovědí; admin ji může opravit."
+                ? "Na zkoušku odpovídáte ano/ne/zatím nevím s povinnou poznámkou, dokud ji admin neuzavře. Při uzavření po začátku se skutečná účast předvyplní podle odpovědí; admin ji může opravit."
                 : "Na vystoupení odpovídáte ano/ne/zatím nevím s povinnou poznámkou. Po termínu pro vyjádření se akce automaticky potvrdí a odpovědi smí měnit jen admin. Před potvrzením vidíte vlastní odpověď, potom odpovědi ostatních."}
             </p>
           </Help>
@@ -196,8 +215,35 @@ function EventContent({
             </p>
           )}
           {member && myRecord && (
-            <Card className="feature-card">
+            <Card className="feature-card my-attendance-card">
               <h2>Moje účast</h2>
+              <Badge
+                tone={
+                  myRecord.interest === "yes"
+                    ? "green"
+                    : myRecord.interest === "no"
+                      ? "red"
+                      : "amber"
+                }
+              >
+                {interestLabels[myRecord.interest]}
+              </Badge>
+              {(myRecord.adminResponse?.at || myRecord.memberResponse?.at) && (
+                <p className="response-timestamp">
+                  Poslední odpověď:{" "}
+                  {formatAuditTime(
+                    [myRecord.adminResponse?.at, myRecord.memberResponse?.at]
+                      .filter((v): v is string => !!v)
+                      .sort()
+                      .at(-1)!,
+                  )}
+                  {myRecord.adminResponse &&
+                  (!myRecord.memberResponse ||
+                    myRecord.adminResponse.at > myRecord.memberResponse.at)
+                    ? " · zadal správce"
+                    : " · vaše odpověď"}
+                </p>
+              )}
               <p>
                 Skutečná účast: {attendanceLabels[myRecord.status]}
                 {myRecord.status === "partial" &&
@@ -205,20 +251,29 @@ function EventContent({
                 {event.status === "closed" &&
                   ` · ${myRecord.earnedPoints ?? 0} bodů`}
               </p>
-              {myRecord.memberResponse && (
-                <p>
-                  Vaše poslední odpověď:{" "}
-                  {interestLabels[myRecord.memberResponse.interest]}
-                </p>
+              {myRecord.memberResponse &&
+                myRecord.memberResponse.interest !== myRecord.interest && (
+                  <p>
+                    Vaše poslední odpověď:{" "}
+                    {interestLabels[myRecord.memberResponse.interest]}
+                  </p>
+                )}
+              {event.canRespond && (
+                <>
+                  {" "}
+                  <h3>Moje odpověď</h3>
+                  <ResponseEditor
+                    key={`${myRecord.interest}:${myRecord.note}`}
+                    event={event}
+                    record={myRecord}
+                    pending={response.isPending}
+                    onSave={(interest, note) =>
+                      response.mutate({ interest, note })
+                    }
+                  />
+                </>
               )}
-              <h3>Moje odpověď</h3>
-              <ResponseEditor
-                key={`${myRecord.interest}:${myRecord.note}`}
-                event={event}
-                record={myRecord}
-                pending={response.isPending}
-                onSave={(interest, note) => response.mutate({ interest, note })}
-              />
+              {myRecord.note && !event.canRespond && <p>{myRecord.note}</p>}
               {!event.canRespond && (
                 <p>Odpovědi jsou uzamčené. Změnu zadá admin.</p>
               )}
@@ -232,54 +287,51 @@ function EventContent({
                       partnerů. Vyšší body mohou zvýšit váhu vašeho přání.
                     </p>
                   </Help>
-                  <div className="standing-picker">
-                    {db.members
-                      .filter(
-                        (m) =>
-                          m.active &&
-                          compatibleMembers(member, m) &&
-                          (event.partnerOptions?.includes(m.id) ?? true),
-                      )
-                      .map((m) => (
-                        <label key={m.id}>
-                          <input
-                            type="checkbox"
-                            disabled={!event.canRespond}
-                            checked={wishes.includes(m.id)}
-                            onChange={(e) =>
-                              setWishes(
-                                e.target.checked
-                                  ? [...wishes, m.id]
-                                  : wishes.filter((id) => id !== m.id),
-                              )
-                            }
-                          />
-                          {m.fullName}
-                        </label>
-                      ))}
-                  </div>
-                  <Button
-                    disabled={!event.canRespond}
-                    loading={saveWishes.isPending}
-                    onClick={() => saveWishes.mutate()}
-                  >
-                    Uložit přání
-                  </Button>
+                  <details className="partner-wishes">
+                    <summary>Vybrat přání partnerů</summary>
+                    <div className="standing-picker">
+                      {db.members
+                        .filter(
+                          (m) =>
+                            m.active &&
+                            compatibleMembers(member, m) &&
+                            (event.partnerOptions?.includes(m.id) ?? true),
+                        )
+                        .map((m) => (
+                          <label key={m.id}>
+                            <input
+                              type="checkbox"
+                              disabled={!event.canRespond}
+                              checked={wishes.includes(m.id)}
+                              onChange={(e) =>
+                                setWishes(
+                                  e.target.checked
+                                    ? [...wishes, m.id]
+                                    : wishes.filter((id) => id !== m.id),
+                                )
+                              }
+                            />
+                            {m.fullName}
+                          </label>
+                        ))}
+                    </div>
+                    <Button
+                      disabled={!event.canRespond}
+                      loading={saveWishes.isPending}
+                      onClick={() => saveWishes.mutate()}
+                    >
+                      Uložit přání
+                    </Button>
+                  </details>
                 </>
               )}
             </Card>
           )}
-          <Card className="feature-card">
+          <Card className="feature-card event-points">
             <h2>Body za účast</h2>
             <p>Plná účast: {event.weight} bodů.</p>
             <ScoringHelp />
           </Card>
-          {event.note && (
-            <Card className="feature-card">
-              <h2>Poznámka</h2>
-              <p>{event.note}</p>
-            </Card>
-          )}
           {(admin || db.myMemberId) && (
             <AuditDisclosure
               eventId={event.id}
@@ -287,8 +339,29 @@ function EventContent({
             />
           )}
         </section>
+      }
+      {sections.length > 0 && (
+        <div
+          className="event-detail-tabs"
+          role="tablist"
+          aria-label="Sekce akce"
+        >
+          {sections.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              id={`tab-${item.id}`}
+              aria-controls={`panel-${item.id}`}
+              aria-selected={activeSection === item.id}
+              onClick={() => setSection(item.id as typeof section)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       )}
-      {section === "participants" && (
+      {activeSection === "participants" && (
         <section
           role="tabpanel"
           id="panel-participants"
@@ -301,7 +374,7 @@ function EventContent({
           )}
         </section>
       )}
-      {section === "pairs" && dance && (
+      {activeSection === "pairs" && dance && (
         <section role="tabpanel" id="panel-pairs" aria-labelledby="tab-pairs">
           {dance && (
             <Card className="feature-card">
@@ -312,14 +385,29 @@ function EventContent({
               </h2>
               {event.type === "rehearsal" ? (
                 <>
-                  {event.pairSets?.map((set) => (
-                    <section key={set.id}>
+                  {pairSets.length > 1 && (
+                    <Select
+                      aria-label="Uložená sada párů"
+                      value={selectedPairSet?.id ?? ""}
+                      onChange={(e) => setPairSetId(e.target.value)}
+                    >
+                      {pairSets.map((set, index) => (
+                        <option key={set.id} value={set.id}>
+                          {index === 0 ? "Poslední · " : ""}
+                          {set.name} · {formatAuditTime(set.createdAt)}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                  {selectedPairSet && (
+                    <section>
                       <h3>
-                        {set.name} · {set.published ? "Zveřejněná" : "Návrh"}
+                        {selectedPairSet.name} ·{" "}
+                        {formatAuditTime(selectedPairSet.createdAt)}
                       </h3>
-                      <PairsList pairs={set.pairs} db={db} />
+                      <PairsList pairs={selectedPairSet.pairs} db={db} />
                     </section>
-                  ))}
+                  )}
                   {!event.pairSets?.length && <p>Zatím žádná sada.</p>}
                 </>
               ) : (
@@ -351,13 +439,13 @@ function EventContent({
           )}
         </section>
       )}
-      {section === "program" && (
+      {activeSection === "program" && (
         <section
           role="tabpanel"
           id="panel-program"
           aria-labelledby="tab-program"
         >
-          {event.type === "performance" && dance && (
+          {(admin || !!event.programItems?.length || !!event.program) && (
             <Card className="feature-card">
               <h2>Program</h2>
               {admin ? (
@@ -380,11 +468,18 @@ function EventContent({
               )}
             </Card>
           )}
-          {event.singing && (
-            <SongSeriesPanel db={db} event={event} admin={admin} />
-          )}
-          {!(event.type === "performance" && dance) && !event.singing && (
-            <p>Na této akci není program ani zpívání.</p>
+          {event.singing &&
+            (admin || !!event.songSeries?.some((s) => s.confirmed)) && (
+              <SongSeriesPanel db={db} event={event} admin={admin} />
+            )}
+          {admin && !event.singing && (
+            <Button
+              variant="secondary"
+              loading={saveEvent.isPending}
+              onClick={() => saveEvent.mutate({ singing: true })}
+            >
+              Zapnout zpívání a série písní
+            </Button>
           )}
         </section>
       )}

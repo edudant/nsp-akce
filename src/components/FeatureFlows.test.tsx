@@ -11,10 +11,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Help } from "./Help";
 import { ResponseEditor, AttendancePanel } from "./AttendancePanel";
 import { SongSeriesPanel } from "./SongSeriesPanel";
+import { useState } from "react";
+import { Dialog } from "./Ui";
+import { EventDetailPage } from "../pages/EventDetailPage";
+import { EventsPage } from "../pages/EventsPage";
+import { DashboardPage } from "../pages/DashboardPage";
 import { EventForm } from "./EventForm";
 import type { AppDatabase, EnsembleEvent, Member } from "../lib/domain";
 const api = vi.hoisted(() => ({
   updateAttendance: vi.fn(),
+  updateMyResponse: vi.fn(),
   saveSongSeries: vi.fn(),
   deleteSongSeries: vi.fn(),
   setPartnerWishes: vi.fn(),
@@ -157,7 +163,7 @@ describe("feature UI flows", () => {
     await user.click(screen.getByRole("button", { name: "Uložit odpověď" }));
     expect(save).toHaveBeenCalledWith("maybe", "Čekám");
   });
-  it("locks member response after confirmation and offers only yes/no for rehearsal", () => {
+  it("locks member response after confirmation and offers reasoned maybe for rehearsal", () => {
     const e = fixture({
       type: "rehearsal",
       status: "closed",
@@ -174,7 +180,7 @@ describe("feature UI flows", () => {
     expect(screen.getByLabelText("Odpověď")).toBeDisabled();
     expect(
       screen.queryByRole("option", { name: "Zatím nevím" }),
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
     expect(
       screen.queryByLabelText("Poznámka k odpovědi"),
     ).not.toBeInTheDocument();
@@ -193,7 +199,12 @@ describe("feature UI flows", () => {
       within(dialog).getByLabelText("Hledat člena k přidání"),
       "zofie",
     );
-    await user.click(within(dialog).getByRole("button", { name: "Přidat" }));
+    await user.click(
+      within(dialog).getByRole("checkbox", { name: "Vybrat Žofie" }),
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Přidat vybrané (1)" }),
+    );
     expect(api.updateAttendance).toHaveBeenCalledWith("e", "b", {
       selected: true,
       status: "present",
@@ -263,5 +274,164 @@ describe("feature UI flows", () => {
       target: { value: "s" },
     });
     expect(screen.getByLabelText("Odhad párů Starý")).toBeInTheDocument();
+  });
+});
+
+function DialogTyping() {
+  const [text, setText] = useState("");
+  return (
+    <Dialog open title="Formulář" onClose={() => setText("")}>
+      <input
+        aria-label="Text"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
+    </Dialog>
+  );
+}
+describe("mobile action regressions", () => {
+  it("keeps focus and all typed characters through dialog rerenders", async () => {
+    const user = userEvent.setup();
+    render(<DialogTyping />);
+    const input = screen.getByLabelText("Text");
+    await user.type(input, "Celý název akce");
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue("Celý název akce");
+  });
+  it("requires a nonblank maybe note on rehearsals", async () => {
+    const user = userEvent.setup(),
+      save = vi.fn(),
+      event = fixture({ type: "rehearsal" });
+    render(
+      <ResponseEditor
+        event={event}
+        record={event.attendance[0]}
+        pending={false}
+        onSave={save}
+      />,
+    );
+    await user.selectOptions(screen.getByLabelText("Odpověď"), "maybe");
+    const note = screen.getByLabelText("Poznámka k odpovědi");
+    expect(note).toBeRequired();
+    await user.type(note, "   ");
+    await user.click(screen.getByRole("button", { name: "Uložit odpověď" }));
+    expect(save).not.toHaveBeenCalled();
+    await user.clear(note);
+    await user.type(note, "Pracovní směna");
+    await user.click(screen.getByRole("button", { name: "Uložit odpověď" }));
+    expect(save).toHaveBeenCalledWith("maybe", "Pracovní směna");
+    expect(
+      screen.queryByRole("option", { name: "Náhradník" }),
+    ).not.toBeInTheDocument();
+  });
+  it("lists both active season kinds and includes older ones only when selected", async () => {
+    const user = userEvent.setup(),
+      db = setup();
+    db.seasons!.push(
+      { ...db.seasons![0], id: "c", name: "Koledy", kind: "carols" },
+      { ...db.seasons![0], id: "o", name: "Starší", active: false },
+    );
+    db.events = [
+      fixture({ title: "Taneční akce" }),
+      fixture({ id: "c", seasonId: "c", title: "Koledová akce" }),
+      fixture({ id: "o", seasonId: "o", title: "Starší akce" }),
+    ];
+    wrap(<EventsPage canEdit={false} />);
+    expect(screen.getByText("Taneční akce")).toBeInTheDocument();
+    expect(screen.getByText("Koledová akce")).toBeInTheDocument();
+    expect(screen.queryByText("Starší akce")).not.toBeInTheDocument();
+    await user.click(screen.getByText(/Sezóny: aktuální/));
+    await user.click(screen.getByRole("checkbox", { name: "Starší" }));
+    expect(screen.getByText("Starší akce")).toBeInTheDocument();
+  });
+  it("keeps personal attendance above relevant tabs and hides empty tabs", () => {
+    const db = setup(fixture({ attendanceScope: "self", singing: false }));
+    db.myMemberId = "a";
+    wrap(
+      <EventDetailPage
+        eventId="e"
+        canAdmin={false}
+        canEdit={false}
+        canPair={false}
+      />,
+    );
+    expect(
+      screen.getByRole("heading", { name: "Moje účast" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Zpět na seznam/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+  });
+  it("shows latest rehearsal set and switches to an older published set", async () => {
+    const user = userEvent.setup(),
+      db = setup(
+        fixture({
+          type: "rehearsal",
+          attendanceScope: "all",
+          pairSets: [
+            {
+              id: "old",
+              name: "Starší sada",
+              published: true,
+              createdAt: "2026-09-28T18:00:00Z",
+              pairs: [
+                {
+                  id: "oldpair",
+                  leaderId: "a",
+                  followerId: "b",
+                  ageGroup: "old",
+                  round: 1,
+                },
+              ],
+            },
+            {
+              id: "new",
+              name: "Novější sada",
+              published: true,
+              createdAt: "2026-09-28T19:00:00Z",
+              pairs: [
+                {
+                  id: "newpair",
+                  leaderId: "a",
+                  followerId: "b",
+                  ageGroup: "young",
+                  round: 1,
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    db.myMemberId = "a";
+    wrap(
+      <EventDetailPage
+        eventId="e"
+        canAdmin={false}
+        canEdit={false}
+        canPair={false}
+      />,
+    );
+    await user.click(screen.getByRole("tab", { name: "Páry" }));
+    expect(screen.getByLabelText("Uložená sada párů")).toHaveValue("new");
+    expect(screen.getByText(/Adam.*Žofie.*Mladý/)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Uložená sada párů"), "old");
+    expect(screen.getByText(/Adam.*Žofie.*Starý/)).toBeInTheDocument();
+  });
+  it("puts upcoming actions before score cards and uses the same response rules", async () => {
+    const user = userEvent.setup(),
+      db = setup(fixture({ date: "2099-01-01", type: "rehearsal" }));
+    db.accessMode = "member";
+    db.myMemberId = "a";
+    wrap(<DashboardPage canEdit={false} />);
+    const upcoming = screen.getByRole("heading", { name: "Nadcházející akce" });
+    const points = screen.getByText("Moje body");
+    expect(
+      upcoming.compareDocumentPosition(points) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    await user.selectOptions(screen.getByLabelText("Odpověď"), "maybe");
+    expect(screen.getByLabelText("Poznámka k odpovědi")).toBeRequired();
+    expect(screen.queryByText("Náhradník")).not.toBeInTheDocument();
   });
 });

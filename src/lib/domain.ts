@@ -386,7 +386,7 @@ export const attendanceLabels: Record<AttendanceStatus, string> = {
 export const interestLabels: Record<InterestStatus, string> = {
   yes: "Přijdu",
   no: "Nepřijdu",
-  maybe: "Ještě nevím",
+  maybe: "Zatím nevím",
   substitute: "Náhradník",
   unset: "Bez odpovědi",
 };

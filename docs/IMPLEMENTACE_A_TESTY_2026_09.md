@@ -135,3 +135,20 @@ Migrace: `20260929090000_action_attendance_audit.sql`. Nové integration
 scénáře kontrolují původní odpověď po opravě, audit a jeho privacy, automatickou
 přítomnost při přidání a převzetí účasti při uzavření vystoupení. Browser test
 ověřuje menu, nastavení, skutečnou účast v detailu, audit a stavová tlačítka.
+
+## Mobilní detail a odpovědi (29. 9.)
+
+- Dialog zaměřuje okno pouze při otevření. Změna formuláře už neodebírá focus.
+- Seznam Akcí má sekce pod sebou, defaultně všechny aktivní sezóny obou typů;
+  starší lze přidat filtrem. Přehled začíná nejbližší akcí s vlastní odpovědí.
+- Detail a vlastní účast jsou trvale nahoře. Člen vidí jen relevantní taby,
+  potvrzené série a uložené páry. Zkouškové sady se přepínají od poslední.
+- Pásma a série lze zadávat i na zkoušce. Přidání účastníků má checkboxy
+  a společné tlačítko; dialog se zavře až po obnovení seznamu a generátoru.
+  Nastavení účasti je v menu řádku, detail rozlišuje nahlášení a skutečnou účast.
+- Odpovědi jsou sjednocené: Ano, Ne, Zatím nevím s neprázdnou poznámkou,
+  včetně zkoušek. Náhradník není povolený na serveru ani nabízený v UI.
+
+Migrace: `20260929120000_rehearsal_maybe_response.sql`. Regresní UI testy
+ověřují focus při psaní, sezóny, relevantní taby, přepínání sad a přehled.
+Browser test zahrnuje mobilní psaní v editaci a hromadné přidání před generováním.
