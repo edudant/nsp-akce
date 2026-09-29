@@ -54,7 +54,15 @@ jobs:
           node scripts/setup-feature-local.mjs
           supabase start --workdir "$NSP_TEST_WORKDIR" --exclude studio,storage-api,realtime,postgres-meta,logflare,vector,supavisor
           bash scripts/test-feature-local-db.sh --reset
-          supabase functions serve --workdir "$NSP_TEST_WORKDIR" --no-verify-jwt > /tmp/nsp-feature-functions.log 2>&1 &
+          nohup supabase functions serve --workdir "$NSP_TEST_WORKDIR" --no-verify-jwt > /tmp/nsp-feature-functions.log 2>&1 &
+
+      - name: Wait for local Edge Function
+        shell: bash
+        run: |
+          if ! node scripts/wait-feature-function.mjs; then
+            tail -100 /tmp/nsp-feature-functions.log
+            exit 1
+          fi
 
       - name: Lint and test database
         shell: bash
