@@ -38,7 +38,7 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
         description="Návrh, ruční úpravy a zveřejnění sestavy."
       />
       <Select
-        aria-label="Událost pro párování"
+        aria-label="Akce pro párování"
         value={event?.id ?? ""}
         onChange={(e) => setEventId(e.target.value)}
       >
@@ -56,7 +56,7 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
           admin={canEdit}
         />
       ) : (
-        <p>Žádné taneční události.</p>
+        <p>Žádné taneční akce.</p>
       )}
     </div>
   );
@@ -95,7 +95,7 @@ function PairingEditor({
     },
   });
   const selected = db.members.filter((m) =>
-    event.attendance.some((r) => r.memberId === m.id && r.selected),
+    event.attendance.some((r) => r.memberId === m.id && r.selected && !["absent", "excused"].includes(r.status)),
   );
   const used = new Set(pairs.flatMap((p) => [p.leaderId, p.followerId]));
   const change = (index: number, patch: Partial<DancePair>) =>
@@ -126,7 +126,7 @@ function PairingEditor({
                     Posuvníky nastavují sílu pravidel. Preference respektují
                     přání zvolené strany; Body zvýhodňují přání členů s vyšší
                     docházkou. Střídání omezuje opakované skutečné páry a stání
-                    v sezóně události. Zkušenost podporuje začátečníky se
+                    v sezóně akce. Zkušenost podporuje začátečníky se
                     zkušenými.
                   </p>
                   <p>
@@ -428,7 +428,7 @@ function PairingEditor({
         )}
         {message && <p role="status">{message}</p>}
         <AppLink to={`/udalosti/${event.id}`}>
-          Detail události a uložené sady
+          Detail akce a uložené sady
         </AppLink>
       </Card>
     </>

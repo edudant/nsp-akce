@@ -43,6 +43,17 @@ export interface AttendanceRecord {
   attendancePercent?: number;
   standing?: boolean;
   actualStanding?: boolean;
+  memberResponse?: {
+    interest: InterestStatus;
+    note?: string;
+    at: string;
+  } | null;
+  adminResponse?: {
+    interest: InterestStatus;
+    note?: string;
+    at: string;
+  } | null;
+  adminChangedAt?: string | null;
   /** Server-calculated value used by restricted views that cannot see weights. */
   earnedPoints?: number;
   interest: InterestStatus;
@@ -152,6 +163,7 @@ export interface EnsembleEvent {
   responseDeadline?: string;
   /** Authoritative response availability calculated by the backend. */
   canRespond?: boolean;
+  canClose?: boolean;
   partnerOptions?: string[];
   /** Describes whether attendance contains the whole roster, only the viewer, or no roster. */
   attendanceScope?: "all" | "self" | "none";
@@ -239,7 +251,24 @@ export interface SessionUser {
   accessMode: AccessMode;
 }
 
+export interface EventAuditEntry {
+  id: string;
+  at: string;
+  actorKind: "member" | "admin" | "system" | "legacy";
+  actorName: string;
+  source: string;
+  kind: "response" | "attendance" | "selection" | "status";
+  memberId?: string;
+  action: string;
+  before: Record<string, string | number | boolean | null> | null;
+  after: Record<string, string | number | boolean | null> | null;
+}
 export interface AppApi {
+  getEventAudit(
+    eventId: string,
+    memberId?: string,
+    memberPreview?: boolean,
+  ): Promise<EventAuditEntry[]>;
   getDatabase(memberPreview?: boolean): Promise<AppDatabase>;
   getMembers(): Promise<Member[]>;
   getEvents(): Promise<EnsembleEvent[]>;

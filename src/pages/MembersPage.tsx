@@ -867,7 +867,7 @@ function MemberScoreSummary({ score }: { score?: ScoreRow }) {
       <header>
         <span>
           <strong>Souhrn bodů</strong>
-          <small>Body a účast podle uzavřených událostí.</small>
+          <small>Body a účast podle uzavřených akcí.</small>
         </span>
       </header>
       <dl>

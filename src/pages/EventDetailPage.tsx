@@ -10,8 +10,9 @@ import {
   Dialog,
   EventStatusBadge,
   EventTypeBadge,
-  Select,
 } from "../components/Ui";
+import { AuditDisclosure } from "../components/EventAudit";
+import { EventStateActions } from "../components/EventStateActions";
 import { Help, ScoringHelp } from "../components/Help";
 import { AttendancePanel, ResponseEditor } from "../components/AttendancePanel";
 import { EventForm } from "../components/EventForm";
@@ -19,6 +20,7 @@ import { EventProgramEditor } from "../components/EventProgramEditor";
 import { SongSeriesPanel } from "../components/SongSeriesPanel";
 import { AppLink } from "../components/Router";
 import { compatibleMembers } from "../lib/ensembleRules";
+import { attendanceLabels, interestLabels } from "../lib/domain";
 import type {
   AppDatabase,
   EnsembleEvent,
@@ -42,7 +44,7 @@ export function EventDetailPage({
   if (db.isError || !db.data)
     return <ErrorState onRetry={() => void db.refetch()} />;
   const event = db.data.events.find((e) => e.id === eventId);
-  if (!event) return <p>Událost nebyla nalezena.</p>;
+  if (!event) return <p>Akce nebyla nalezena.</p>;
   return (
     <EventContent
       key={eventId}
@@ -66,13 +68,20 @@ function EventContent({
 }) {
   const query = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const [section, setSection] = useState<
+    "detail" | "participants" | "pairs" | "program"
+  >("detail");
   const [wishes, setWishes] = useState(
     (db.partnerWishes ?? [])
       .filter((w) => w.eventId === event.id && w.memberId === db.myMemberId)
       .map((w) => w.partnerId),
   );
   const refresh = async () => {
-    await query.invalidateQueries({ queryKey: databaseQueryKey });
+    await Promise.all([
+      query.invalidateQueries({ queryKey: databaseQueryKey }),
+      query.invalidateQueries({ queryKey: ["event-audit"] }),
+      query.invalidateQueries({ queryKey: ["scores"] }),
+    ]);
   };
   const status = useMutation({
     mutationFn: (value: EventStatus) =>
@@ -115,7 +124,7 @@ function EventContent({
   const dance = event.seasonKind !== "carols";
   return (
     <div className="page">
-      <AppLink to="/udalosti">← Události</AppLink>
+      <AppLink to="/udalosti">← Akce</AppLink>
       <PageHeader
         title={event.title}
         description={`${event.date} · ${event.startTime}–${event.endTime} · ${event.location}`}
@@ -127,24 +136,13 @@ function EventContent({
         {admin && (
           <>
             <Button variant="secondary" onClick={() => setEditing(true)}>
-              Upravit událost
+              Upravit akci
             </Button>
-            {event.status !== "cancelled" && (
-              <Select
-                aria-label="Stav události"
-                disabled={status.isPending}
-                value={event.status}
-                onChange={(e) => status.mutate(e.target.value as EventStatus)}
-              >
-                <option value="draft">Návrh</option>
-                <option value="open">Otevřená</option>
-                {event.type === "performance" && (
-                  <option value="confirmed">Potvrzená</option>
-                )}
-                <option value="closed">Uzavřená</option>
-                <option value="cancelled">Zrušená</option>
-              </Select>
-            )}
+            <EventStateActions
+              event={event}
+              pending={status.isPending}
+              onChange={(value) => status.mutate(value)}
+            />
           </>
         )}
         {canPair && dance && (
@@ -156,167 +154,239 @@ function EventContent({
           </AppLink>
         )}
       </div>
-      <Help title="Stavy události a odpovědi">
-        <p>
-          {event.type === "rehearsal"
-            ? "Na zkoušku odpovídáte ano/ne, dokud ji admin neuzavře. Při uzavření po začátku se skutečná účast předvyplní podle odpovědí; admin ji může opravit."
-            : "Na vystoupení odpovídáte ano/ne/zatím nevím s povinnou poznámkou. Po termínu pro vyjádření se událost automaticky potvrdí a odpovědi smí měnit jen admin. Před potvrzením vidíte vlastní odpověď, potom odpovědi ostatních."}
-        </p>
-      </Help>
-      {event.responseDeadline && (
-        <p>
-          Termín pro vyjádření:{" "}
-          {new Intl.DateTimeFormat("cs-CZ", {
-            dateStyle: "medium",
-            timeStyle: "short",
-            timeZone: "Europe/Prague",
-          }).format(new Date(event.responseDeadline))}
-        </p>
-      )}
-      {member && myRecord && !admin && (
-        <Card className="feature-card">
-          <h2>Moje odpověď</h2>
-          <ResponseEditor
-            key={`${myRecord.interest}:${myRecord.note}`}
-            event={event}
-            record={myRecord}
-            pending={response.isPending}
-            onSave={(interest, note) => response.mutate({ interest, note })}
-          />
-          {!event.canRespond && (
-            <p>Odpovědi jsou uzamčené. Změnu zadá admin.</p>
-          )}
-          {event.type === "performance" && dance && (
-            <>
-              <Help title="Přání partnerů">
-                <p>
-                  Vyberte kompatibilní partnery: opačnou roli a společné
-                  zařazení. Přání je doporučení pro generátor; jeho splnění může
-                  bránit zákaz dvojice, jiná přání nebo nedostatek partnerů.
-                  Vyšší body mohou zvýšit váhu vašeho přání.
-                </p>
-              </Help>
-              <div className="standing-picker">
-                {db.members
-                  .filter(
-                    (m) =>
-                      m.active &&
-                      compatibleMembers(member, m) &&
-                      (event.partnerOptions?.includes(m.id) ?? true),
-                  )
-                  .map((m) => (
-                    <label key={m.id}>
-                      <input
-                        type="checkbox"
-                        disabled={!event.canRespond}
-                        checked={wishes.includes(m.id)}
-                        onChange={(e) =>
-                          setWishes(
-                            e.target.checked
-                              ? [...wishes, m.id]
-                              : wishes.filter((id) => id !== m.id),
-                          )
-                        }
-                      />
-                      {m.fullName}
-                    </label>
-                  ))}
-              </div>
-              <Button
-                disabled={!event.canRespond}
-                loading={saveWishes.isPending}
-                onClick={() => saveWishes.mutate()}
-              >
-                Uložit přání
-              </Button>
-            </>
-          )}
-        </Card>
-      )}
-      {event.attendanceScope === "all" ? (
-        <AttendancePanel db={db} event={event} admin={admin} />
-      ) : (
-        <p>Seznam odpovědí ostatních bude dostupný po potvrzení události.</p>
-      )}
-      <Card className="feature-card">
-        <h2>Body za účast</h2>
-        <p>Plná účast: {event.weight} bodů.</p>
-        <ScoringHelp />
-      </Card>
-      {dance && (
-        <Card className="feature-card">
-          <h2>
-            {event.type === "rehearsal"
-              ? "Uložené sady párů"
-              : "Páry pro vystoupení"}
-          </h2>
-          {event.type === "rehearsal" ? (
-            <>
-              {event.pairSets?.map((set) => (
-                <section key={set.id}>
-                  <h3>
-                    {set.name} · {set.published ? "Zveřejněná" : "Návrh"}
-                  </h3>
-                  <PairsList pairs={set.pairs} db={db} />
-                </section>
-              ))}
-              {!event.pairSets?.length && <p>Zatím žádná sada.</p>}
-            </>
-          ) : (
-            <>
-              <PairsList pairs={event.pairs} db={db} />
-              {admin &&
-                event.status === "closed" &&
-                event.pairsPublished &&
-                event.pairs.length > 0 && (
-                  <Button
-                    loading={confirm.isPending}
-                    onClick={() => confirm.mutate()}
-                  >
-                    Potvrdit skutečné páry
-                  </Button>
-                )}
-              <Help title="Skutečně odtančené páry">
-                <p>
-                  Zveřejněný návrh ještě není skutečná historie. Po vystoupení
-                  upravte sestavu a skutečnou účast, poté potvrďte, kdo skutečně
-                  tančil. Páry pod čarou se nepotvrzují automaticky. Zkouškové
-                  sady se do historie nikdy nezapočítávají.
-                </p>
-              </Help>
-            </>
-          )}
-        </Card>
-      )}
-      {event.type === "performance" && dance && (
-        <Card className="feature-card">
-          <h2>Program</h2>
-          {admin ? (
-            <EventProgramEditor
-              key={JSON.stringify(event.programItems)}
-              items={event.programItems ?? []}
-              catalog={db.programCatalog ?? []}
-              eventBlocks={[]}
-              pairsPublished={event.pairsPublished}
-              loading={program.isPending}
-              error={program.error?.message}
-              onSave={(items) => program.mutate(items)}
-            />
-          ) : (
+      <div className="event-sections" role="tablist" aria-label="Sekce akce">
+        {(
+          [
+            { id: "detail", label: "Detail a moje účast" },
+            { id: "participants", label: "Účastníci" },
+            ...(dance ? [{ id: "pairs", label: "Páry" }] : []),
+            { id: "program", label: "Pásma" },
+          ] as const
+        ).map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            id={`tab-${item.id}`}
+            aria-controls={`panel-${item.id}`}
+            aria-selected={section === item.id}
+            onClick={() => setSection(item.id as typeof section)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {section === "detail" && (
+        <section role="tabpanel" id="panel-detail" aria-labelledby="tab-detail">
+          <Help title="Stavy akce a odpovědi">
             <p>
-              {event.programItems?.map((p) => p.name).join(", ") ||
-                event.program ||
-                "Neuveden"}
+              {event.type === "rehearsal"
+                ? "Na zkoušku odpovídáte ano/ne, dokud ji admin neuzavře. Při uzavření po začátku se skutečná účast předvyplní podle odpovědí; admin ji může opravit."
+                : "Na vystoupení odpovídáte ano/ne/zatím nevím s povinnou poznámkou. Po termínu pro vyjádření se akce automaticky potvrdí a odpovědi smí měnit jen admin. Před potvrzením vidíte vlastní odpověď, potom odpovědi ostatních."}
+            </p>
+          </Help>
+          {event.responseDeadline && (
+            <p>
+              Termín pro vyjádření:{" "}
+              {new Intl.DateTimeFormat("cs-CZ", {
+                dateStyle: "medium",
+                timeStyle: "short",
+                timeZone: "Europe/Prague",
+              }).format(new Date(event.responseDeadline))}
             </p>
           )}
-        </Card>
+          {member && myRecord && (
+            <Card className="feature-card">
+              <h2>Moje účast</h2>
+              <p>
+                Skutečná účast: {attendanceLabels[myRecord.status]}
+                {myRecord.status === "partial" &&
+                  ` ${myRecord.attendancePercent} %`}
+                {event.status === "closed" &&
+                  ` · ${myRecord.earnedPoints ?? 0} bodů`}
+              </p>
+              {myRecord.memberResponse && (
+                <p>
+                  Vaše poslední odpověď:{" "}
+                  {interestLabels[myRecord.memberResponse.interest]}
+                </p>
+              )}
+              <h3>Moje odpověď</h3>
+              <ResponseEditor
+                key={`${myRecord.interest}:${myRecord.note}`}
+                event={event}
+                record={myRecord}
+                pending={response.isPending}
+                onSave={(interest, note) => response.mutate({ interest, note })}
+              />
+              {!event.canRespond && (
+                <p>Odpovědi jsou uzamčené. Změnu zadá admin.</p>
+              )}
+              {event.type === "performance" && dance && (
+                <>
+                  <Help title="Přání partnerů">
+                    <p>
+                      Vyberte kompatibilní partnery: opačnou roli a společné
+                      zařazení. Přání je doporučení pro generátor; jeho splnění
+                      může bránit zákaz dvojice, jiná přání nebo nedostatek
+                      partnerů. Vyšší body mohou zvýšit váhu vašeho přání.
+                    </p>
+                  </Help>
+                  <div className="standing-picker">
+                    {db.members
+                      .filter(
+                        (m) =>
+                          m.active &&
+                          compatibleMembers(member, m) &&
+                          (event.partnerOptions?.includes(m.id) ?? true),
+                      )
+                      .map((m) => (
+                        <label key={m.id}>
+                          <input
+                            type="checkbox"
+                            disabled={!event.canRespond}
+                            checked={wishes.includes(m.id)}
+                            onChange={(e) =>
+                              setWishes(
+                                e.target.checked
+                                  ? [...wishes, m.id]
+                                  : wishes.filter((id) => id !== m.id),
+                              )
+                            }
+                          />
+                          {m.fullName}
+                        </label>
+                      ))}
+                  </div>
+                  <Button
+                    disabled={!event.canRespond}
+                    loading={saveWishes.isPending}
+                    onClick={() => saveWishes.mutate()}
+                  >
+                    Uložit přání
+                  </Button>
+                </>
+              )}
+            </Card>
+          )}
+          <Card className="feature-card">
+            <h2>Body za účast</h2>
+            <p>Plná účast: {event.weight} bodů.</p>
+            <ScoringHelp />
+          </Card>
+          {event.note && (
+            <Card className="feature-card">
+              <h2>Poznámka</h2>
+              <p>{event.note}</p>
+            </Card>
+          )}
+          {(admin || db.myMemberId) && (
+            <AuditDisclosure
+              eventId={event.id}
+              title={admin ? "Audit akce" : "Moje historie změn"}
+            />
+          )}
+        </section>
       )}
-      {event.singing && <SongSeriesPanel db={db} event={event} admin={admin} />}
-      {event.note && (
-        <Card className="feature-card">
-          <h2>Poznámka</h2>
-          <p>{event.note}</p>
-        </Card>
+      {section === "participants" && (
+        <section
+          role="tabpanel"
+          id="panel-participants"
+          aria-labelledby="tab-participants"
+        >
+          {event.attendanceScope === "all" ? (
+            <AttendancePanel db={db} event={event} admin={admin} />
+          ) : (
+            <p>Seznam odpovědí ostatních bude dostupný po potvrzení akce.</p>
+          )}
+        </section>
+      )}
+      {section === "pairs" && dance && (
+        <section role="tabpanel" id="panel-pairs" aria-labelledby="tab-pairs">
+          {dance && (
+            <Card className="feature-card">
+              <h2>
+                {event.type === "rehearsal"
+                  ? "Uložené sady párů"
+                  : "Páry pro vystoupení"}
+              </h2>
+              {event.type === "rehearsal" ? (
+                <>
+                  {event.pairSets?.map((set) => (
+                    <section key={set.id}>
+                      <h3>
+                        {set.name} · {set.published ? "Zveřejněná" : "Návrh"}
+                      </h3>
+                      <PairsList pairs={set.pairs} db={db} />
+                    </section>
+                  ))}
+                  {!event.pairSets?.length && <p>Zatím žádná sada.</p>}
+                </>
+              ) : (
+                <>
+                  <PairsList pairs={event.pairs} db={db} />
+                  {admin &&
+                    event.status === "closed" &&
+                    event.pairsPublished &&
+                    event.pairs.length > 0 && (
+                      <Button
+                        loading={confirm.isPending}
+                        onClick={() => confirm.mutate()}
+                      >
+                        Potvrdit skutečné páry
+                      </Button>
+                    )}
+                  <Help title="Skutečně odtančené páry">
+                    <p>
+                      Zveřejněný návrh ještě není skutečná historie. Po
+                      vystoupení upravte sestavu a skutečnou účast, poté
+                      potvrďte, kdo skutečně tančil. Páry pod čarou se
+                      nepotvrzují automaticky. Zkouškové sady se do historie
+                      nikdy nezapočítávají.
+                    </p>
+                  </Help>
+                </>
+              )}
+            </Card>
+          )}
+        </section>
+      )}
+      {section === "program" && (
+        <section
+          role="tabpanel"
+          id="panel-program"
+          aria-labelledby="tab-program"
+        >
+          {event.type === "performance" && dance && (
+            <Card className="feature-card">
+              <h2>Program</h2>
+              {admin ? (
+                <EventProgramEditor
+                  key={JSON.stringify(event.programItems)}
+                  items={event.programItems ?? []}
+                  catalog={db.programCatalog ?? []}
+                  eventBlocks={[]}
+                  pairsPublished={event.pairsPublished}
+                  loading={program.isPending}
+                  error={program.error?.message}
+                  onSave={(items) => program.mutate(items)}
+                />
+              ) : (
+                <p>
+                  {event.programItems?.map((p) => p.name).join(", ") ||
+                    event.program ||
+                    "Neuveden"}
+                </p>
+              )}
+            </Card>
+          )}
+          {event.singing && (
+            <SongSeriesPanel db={db} event={event} admin={admin} />
+          )}
+          {!(event.type === "performance" && dance) && !event.singing && (
+            <p>Na této akci není program ani zpívání.</p>
+          )}
+        </section>
       )}
       {(status.error ||
         response.error ||
@@ -333,7 +403,7 @@ function EventContent({
         <Dialog
           open={editing}
           onClose={() => setEditing(false)}
-          title="Upravit událost"
+          title="Upravit akci"
         >
           <EventForm
             event={event}

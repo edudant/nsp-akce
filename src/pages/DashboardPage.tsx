@@ -91,7 +91,7 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
               to="/udalosti"
             >
               <CalendarPlus aria-hidden="true" />
-              Přidat událost
+              Přidat akci
             </AppLink>
           ) : null
         }
@@ -108,7 +108,7 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
         {nextEvent ? (
           <Card className="next-event-card">
             <div className="next-event-card__topline">
-              <span className="eyebrow">Nejbližší událost</span>
+              <span className="eyebrow">Nejbližší akce</span>
               <EventTypeBadge type={nextEvent.type} />
             </div>
             <div className="next-event-card__main">
@@ -179,7 +179,7 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
                 className="button button--secondary button--medium"
                 to={`/udalosti/${nextEvent.id}`}
               >
-                Otevřít událost
+                Otevřít akci
                 <ArrowRight aria-hidden="true" />
               </AppLink>
             </div>
@@ -191,7 +191,7 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
             </span>
             <div className="next-event-empty__copy">
               <span className="eyebrow">Další společný termín</span>
-              <h2>Zatím není naplánovaná další událost</h2>
+              <h2>Zatím není naplánovaná další akce</h2>
               <p>
                 Jakmile vedení přidá nový termín, objeví se na tomto místě.
               </p>
@@ -200,7 +200,7 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
               className="button button--secondary button--medium"
               to="/udalosti"
             >
-              Projít všechny události
+              Projít všechny akce
               <ArrowRight aria-hidden="true" />
             </AppLink>
           </Card>
@@ -275,7 +275,7 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
             <CalendarRange aria-hidden="true" />
           </span>
           <span>
-            <small>Událostí v sezoně</small>
+            <small>Akceí v sezoně</small>
             <strong>{database.data.events.length}</strong>
             <em>{upcoming.length} nás ještě čeká</em>
           </span>
@@ -297,7 +297,7 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
           <div className="card-heading">
             <div>
               <span className="eyebrow">Kalendář</span>
-              <h2>Nadcházející události</h2>
+              <h2>Nadcházející akce</h2>
             </div>
             <AppLink className="text-link" to="/udalosti">
               Zobrazit všechny <ArrowRight aria-hidden="true" />
@@ -341,7 +341,7 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
           <div className="quick-actions">
             <AppLink to={nextEvent ? `/udalosti/${nextEvent.id}` : "/udalosti"}>
               <span><UserCheck aria-hidden="true" /></span>
-              {canEdit ? "Zapsat docházku" : "Zobrazit nejbližší událost"}
+              {canEdit ? "Zapsat docházku" : "Zobrazit nejbližší akci"}
               <ArrowRight aria-hidden="true" />
             </AppLink>
             <AppLink to="/pary">
@@ -441,7 +441,7 @@ function MemberDashboard({ database }: { database: AppDatabase }) {
                 ).length
               }
             </strong>
-            <em>nadcházejících událostí</em>
+            <em>nadcházejících akcí</em>
           </span>
         </Card>
       </section>
@@ -450,7 +450,7 @@ function MemberDashboard({ database }: { database: AppDatabase }) {
         <div className="section-heading">
           <div>
             <span className="eyebrow">Potvrzení účasti</span>
-            <h2>Nadcházející události</h2>
+            <h2>Nadcházející akce</h2>
           </div>
         </div>
         <div className="member-event-list">
@@ -561,7 +561,7 @@ function MemberDashboard({ database }: { database: AppDatabase }) {
             </AppLink>
           ))}
           {recentAttendance.length === 0 ? (
-            <p>Zatím nemáte uzavřenou událost se zapsanou docházkou.</p>
+            <p>Zatím nemáte uzavřenou akci se zapsanou docházkou.</p>
           ) : null}
         </div>
       </Card>
@@ -611,7 +611,7 @@ function MemberDashboard({ database }: { database: AppDatabase }) {
               </article>
             ))}
             {orderedHistory.length === 0 ? (
-              <p>Zatím tu není žádná událost.</p>
+              <p>Zatím tu není žádná akce.</p>
             ) : null}
           </div>
         </details>

@@ -40,3 +40,13 @@ export function formatPoints(value: number) {
     maximumFractionDigits: 2,
   }).format(value);
 }
+
+export function formatAuditTime(at?: string | null) {
+  return at
+    ? new Intl.DateTimeFormat("cs-CZ", {
+        dateStyle: "short",
+        timeStyle: "short",
+        timeZone: "Europe/Prague",
+      }).format(new Date(at))
+    : "";
+}

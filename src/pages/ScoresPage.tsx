@@ -366,14 +366,14 @@ export function ScoresPage() {
         <div>
           <strong>Jak se body počítají?</strong>
           <p>
-            Celá účast získá plnou váhu události. U částečné účasti se body
+            Celá účast získá plnou váhu akce. U částečné účasti se body
             přepočítají podle procenta účasti zadaného adminem. Omluvená absence
             má 0 bodů, ale v přehledu ji odlišujeme.
           </p>
         </div>
         <span>
           <ArrowDown aria-hidden="true" />
-          Výpočet je dohledatelný u každé události
+          Výpočet je dohledatelný u každé akce
         </span>
       </div>
     </div>

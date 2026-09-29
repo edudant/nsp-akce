@@ -109,3 +109,29 @@ Migrace: `20260928120000_admin_member_preview.sql`. Integration testy
 ověřují omezení dat i scores, vlastní identitu, odmítnutí non-admin a
 zachování admin přístupu. Browser test ověřuje přepnutí z Nastavení,
 členské ovládání, potvrzené série, skrytí zkušeností a návrat na mobilu.
+
+## Akce, kompaktní nastavení a audit (29. 9.)
+
+- Přepnutí „Zobrazit jako člen / správce“ je pouze v menu.
+- Nastavení má přímé menu odkazy Sezóny, Pásma, Písně, Přístupy a Data.
+  Evidence používají stejné kompaktní řádky, detail a formulář nové položky.
+- Český název je Akce; `events` a existující URL `/udalosti` zůstávají.
+- Detail Akce se přepíná mezi detailem a vlastní účastí, účastníky, páry
+  a pásmy. Pásma zahrnují také série písní. Koledy nemají sekci párů.
+- Účastníci mají rychlou změnu skutečné účasti v řádku. Detail obsahuje
+  procenta, odpověď, přání a historii. Přidání zapíše plnou účast i na serveru.
+- Uzavření obou typů akcí převezme Ano/Ne jen pro nezapsanou skutečnou
+  účast; ruční záznamy se zachovají. Nevím a bez odpovědi zůstanou nezapsané.
+  Výběr pro párování se sjednotí podle skutečné přítomnosti.
+- Stavové přechody mají tlačítka a vysvětlení před provedením. Uzavření je
+  povolené po začátku. Zrušení ani opětovné otevření nemaže historii.
+- Audit používá stávající append-only historii a nově ukládá roli a jméno
+  autora v okamžiku změny i zdroj automatického převzetí. Starší záznamy
+  zůstávají označené bez domýšlení původní role. Read RPC vrací pouze
+  vybraná pole, správce vidí vše, člen pouze vlastní historii. Sdílený přístup
+  nemá audit. Členský preview respektuje stejné omezení.
+
+Migrace: `20260929090000_action_attendance_audit.sql`. Nové integration
+scénáře kontrolují původní odpověď po opravě, audit a jeho privacy, automatickou
+přítomnost při přidání a převzetí účasti při uzavření vystoupení. Browser test
+ověřuje menu, nastavení, skutečnou účast v detailu, audit a stavová tlačítka.

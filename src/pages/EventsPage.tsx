@@ -83,7 +83,7 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
       .sort((first, second) => second.date.localeCompare(first.date));
   }, [database.data, filter, search]);
 
-  if (database.isLoading) return <LoadingState label="Načítám události…" />;
+  if (database.isLoading) return <LoadingState label="Načítám akce…" />;
   if (database.isError || !database.data) {
     return <ErrorState onRetry={() => void database.refetch()} />;
   }
@@ -99,17 +99,17 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
           canEdit ? (
             <Button onClick={() => setCreateOpen(true)}>
               <CalendarPlus aria-hidden="true" />
-              Nová událost
+              Nová akce
             </Button>
           ) : null
         }
         description="Plánujte zkoušky a vystoupení, sbírejte zájem a zapisujte účast."
         eyebrow="Letní sezona 2026"
-        title="Události"
+        title="Akce"
       />
 
       <Card className="toolbar-card">
-        <div className="filter-tabs" role="tablist" aria-label="Typ události">
+        <div className="filter-tabs" role="tablist" aria-label="Typ akce">
           {(
             [
               ["all", "Všechny"],
@@ -139,10 +139,10 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
         <div className="toolbar-card__controls">
           <label className="search-field">
             <Search aria-hidden="true" />
-            <span className="sr-only">Hledat událost</span>
+            <span className="sr-only">Hledat akce</span>
             <input
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Hledat událost…"
+              placeholder="Hledat akce…"
               type="search"
               value={search}
             />
@@ -176,12 +176,12 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
             canEdit ? (
               <Button onClick={() => setCreateOpen(true)} size="small">
                 <CalendarPlus aria-hidden="true" />
-                Přidat událost
+                Přidat akci
               </Button>
             ) : undefined
           }
-          description="Zkuste upravit filtr nebo založte novou událost."
-          title="Žádné události jsme nenašli"
+          description="Zkuste upravit filtr nebo založte novou akci."
+          title="Žádné akce jsme nenašli"
         />
       ) : view === "calendar" ? (
         <EventCalendar
@@ -415,7 +415,7 @@ function CreateEventDialog({
   programCatalog: ProgramCatalogItem[];
 }) {
   return (
-    <Dialog open={open} onClose={onClose} title="Přidat událost">
+    <Dialog open={open} onClose={onClose} title="Přidat akci">
       <EventForm loading={loading} error={error} onSave={onCreate} />
     </Dialog>
   );

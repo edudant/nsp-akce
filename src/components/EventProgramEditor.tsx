@@ -192,10 +192,10 @@ export function EventProgramEditor({
     <Card className="event-program-editor">
       <div className="card-heading event-program-editor__heading">
         <div>
-          <span className="eyebrow">Program události</span>
+          <span className="eyebrow">Program akce</span>
           <h2>Pásma a jejich pořadí</h2>
           <p>
-            Vyberte pásma z katalogu nebo přidejte název jen pro tuto událost.
+            Vyberte pásma z katalogu nebo přidejte název jen pro tuto akci.
           </p>
         </div>
         <div className="event-program-editor__actions">
@@ -277,7 +277,7 @@ export function EventProgramEditor({
         </ol>
       ) : (
         <p className="event-program-editor__empty">
-          Program je prázdný. Událost se při započítání párů bere jako jeden
+          Program je prázdný. Akce se při započítání párů bere jako jeden
           celek.
         </p>
       )}
@@ -319,7 +319,7 @@ export function EventProgramEditor({
         </div>
         <div className="event-program-editor__add-row">
           <label htmlFor="event-program-custom">
-            Vlastní název pro tuto událost
+            Vlastní název pro tuto akci
           </label>
           <div>
             <input

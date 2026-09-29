@@ -143,8 +143,19 @@ export default function App() {
     page = <PairingPage canEdit={canAdmin} />;
   } else if (route === "/clenove" && canRecord) {
     page = <MembersPage canEdit={canAdmin} />;
-  } else if (route === "/nastaveni" && canAdmin) {
-    page = <SettingsPage canEdit session={session} />;
+  } else if (
+    (route === "/nastaveni" ||
+      /^\/nastaveni\/(sezony|pasma|pisne|pristupy|data)$/.test(route)) &&
+    canAdmin
+  ) {
+    page = (
+      <SettingsPage
+        key={route}
+        canEdit
+        session={session}
+        section={route.split("/")[2] || "pristupy"}
+      />
+    );
   } else {
     page = <NotFoundPage />;
   }
@@ -158,7 +169,7 @@ export default function App() {
           session.role === "admin"
             ? () => {
                 setPreviewAccount(memberPreview ? null : accountScope);
-                if (route === "/nastaveni" || route === "/clenove")
+                if (route.startsWith("/nastaveni") || route === "/clenove")
                   navigate("/");
               }
             : undefined

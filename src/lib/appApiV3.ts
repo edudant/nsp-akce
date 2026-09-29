@@ -4,6 +4,7 @@ import type {
   EnsembleEvent,
   Member,
   ScoreRow,
+  EventAuditEntry,
 } from "./domain";
 import { requireSupabase } from "./supabase";
 import { supabaseApi } from "./supabaseData";
@@ -85,6 +86,15 @@ async function eventById(id: string): Promise<EnsembleEvent> {
 export const appApiV3: AppApi = {
   ...supabaseApi,
   getDatabase: getDatabaseV3,
+  async getEventAudit(eventId, memberId, memberPreview = false) {
+    const { data, error } = await requireSupabase().rpc("get_event_audit_v4", {
+      target_event_id: eventId,
+      target_member_id: memberId ?? null,
+      member_preview: memberPreview,
+    });
+    if (error) throw error;
+    return data as EventAuditEntry[];
+  },
   getMembers: async () => (await getDatabaseV3()).members,
   getEvents: async () => (await getDatabaseV3()).events,
   getEvent: async (id) =>

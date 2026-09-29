@@ -7,22 +7,33 @@ import {
   Medal,
   Menu,
   Settings,
+  ListMusic,
+  KeyRound,
+  Database,
+  Layers,
   Sparkles,
   UsersRound,
   X,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import type { SessionUser } from "../lib/domain";
-import { Help } from "./Help";
 import { BrandMark } from "./BrandMark";
 import { AppLink } from "./Router";
 
 const navigation = [
   { path: "/", label: "Přehled", icon: Home },
-  { path: "/udalosti", label: "Události", icon: CalendarDays },
+  { path: "/udalosti", label: "Akce", icon: CalendarDays },
   { path: "/pary", label: "Páry", icon: Sparkles },
   { path: "/body", label: "Body", icon: Medal },
   { path: "/clenove", label: "Členové", icon: UsersRound },
+];
+
+const settingsNavigation = [
+  { path: "/nastaveni/sezony", label: "Sezóny", icon: CalendarDays },
+  { path: "/nastaveni/pasma", label: "Pásma", icon: Layers },
+  { path: "/nastaveni/pisne", label: "Písně", icon: ListMusic },
+  { path: "/nastaveni/pristupy", label: "Přístupy", icon: KeyRound },
+  { path: "/nastaveni/data", label: "Data", icon: Database },
 ];
 
 function pathIsActive(currentPath: string, path: string) {
@@ -100,21 +111,59 @@ export function AppShell({
               </AppLink>
             );
           })}
+          {canOpenSettings && (
+            <div className="sidebar__settings">
+              <span className="sidebar__section-label">Nastavení</span>
+              {settingsNavigation.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <AppLink
+                    key={item.path}
+                    to={item.path}
+                    aria-current={
+                      pathIsActive(currentPath, item.path) ? "page" : undefined
+                    }
+                    className={
+                      pathIsActive(currentPath, item.path) ? "is-active" : ""
+                    }
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>{item.label}</span>
+                  </AppLink>
+                );
+              })}
+            </div>
+          )}
         </nav>
 
         <div className="sidebar__bottom">
-          {canOpenSettings ? (
-            <AppLink
-              className={
-                pathIsActive(currentPath, "/nastaveni") ? "is-active" : ""
-              }
-              onClick={() => setMobileMenuOpen(false)}
-              to="/nastaveni"
+          {onToggleMemberPreview && (
+            <button
+              className="sidebar__view-toggle"
+              type="button"
+              aria-pressed={memberPreview}
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onToggleMemberPreview();
+              }}
             >
-              <Settings aria-hidden="true" />
-              <span>Nastavení</span>
-            </AppLink>
-          ) : null}
+              <Eye aria-hidden="true" />
+              <span>
+                {memberPreview ? "Zobrazit jako správce" : "Zobrazit jako člen"}
+              </span>
+            </button>
+          )}
+          {onToggleMemberPreview && (
+            <details className="sidebar__view-help">
+              <summary>Nápověda zobrazení</summary>
+              <p>
+                Náhled skryje administraci a nezveřejněné podklady. Osobní
+                odpovědi patří vašemu členskému účtu a jejich uložení je
+                skutečná změna. Obnovení stránky vrátí zobrazení správce.
+              </p>
+            </details>
+          )}
           <div className="sidebar__profile">
             <span aria-hidden="true" className="profile-avatar">
               {session.displayName
@@ -157,7 +206,7 @@ export function AppShell({
             <strong>Postřekov</strong>
           </AppLink>
           {canOpenSettings ? (
-            <AppLink aria-label="Nastavení" to="/nastaveni">
+            <AppLink aria-label="Nastavení" to="/nastaveni/pristupy">
               <Settings aria-hidden="true" />
             </AppLink>
           ) : (
@@ -165,38 +214,6 @@ export function AppShell({
           )}
         </header>
 
-        {onToggleMemberPreview && (
-          <section className="view-mode" aria-label="Režim zobrazení">
-            <div className="view-mode__controls">
-              <span>
-                {memberPreview
-                  ? "Zobrazení jako běžný člen"
-                  : "Zobrazení administrátora"}
-              </span>
-              <button
-                className="button button--secondary button--medium"
-                type="button"
-                aria-pressed={memberPreview}
-                onClick={onToggleMemberPreview}
-              >
-                <Eye aria-hidden="true" />
-                {memberPreview ? "Zpět do administrace" : "Zobrazit jako člen"}
-              </button>
-            </div>
-            <Help title="Jak funguje zobrazení člena">
-              <p>
-                Náhled respektuje viditelnost pro běžné členy: skryje interní
-                údaje, administraci a dosud nezveřejněné páry a série písní.
-                Přihlášení admina zůstává zachované.
-              </p>
-              <p>
-                Moje odpovědi, přání a historie patří vašemu vlastnímu členskému
-                účtu. Uložení odpovědi nebo přání je skutečná změna. Pokud s
-                účtem není propojený člen, osobní odpovědi se nezobrazí.
-              </p>
-            </Help>
-          </section>
-        )}
         <main id="main-content">{children}</main>
 
         <nav

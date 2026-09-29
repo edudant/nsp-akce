@@ -659,6 +659,174 @@ try {
   );
   assert.equal(race.filter((r) => !r.error).length, 1);
   pass("Concurrent series edits cannot reserve the same song twice");
+  const auditEvent = ok(await rpc(admin, "event", input("performance"))).id;
+  eventIds.push(auditEvent);
+  ok(
+    await rpc(member, "response", {
+      id: auditEvent,
+      interest: "yes",
+      note: "PRIVATE RESPONSE OLD NOTE",
+    }),
+  );
+  ok(await rpc(other, "response", { id: auditEvent, interest: "no" }));
+  ok(
+    await rpc(admin, "attendance", {
+      id: auditEvent,
+      memberId: members[3].id,
+      interest: "yes",
+    }),
+  );
+  ok(
+    await rpc(admin, "attendance", {
+      id: auditEvent,
+      memberId: members[1].id,
+      status: "partial",
+      attendancePercent: 75,
+    }),
+  );
+  ok(
+    await rpc(admin, "attendance", {
+      id: auditEvent,
+      memberId: members[1].id,
+      interest: "no",
+      note: "Oprava správcem",
+    }),
+  );
+  let audited = (await db(admin)).events.find((e) => e.id === auditEvent);
+  assert.equal(
+    audited.attendance.find((a) => a.memberId === members[1].id).memberResponse
+      .interest,
+    "yes",
+  );
+  assert.equal(
+    audited.attendance.find((a) => a.memberId === members[1].id).interest,
+    "no",
+  );
+  assert.equal(
+    audited.attendance.find((a) => a.memberId === members[1].id).adminResponse
+      .interest,
+    "no",
+  );
+  assert.equal(
+    audited.attendance.find((a) => a.memberId === members[1].id).memberResponse
+      .note,
+    "PRIVATE RESPONSE OLD NOTE",
+  );
+  const ownAudit = ok(
+    await member.rpc("get_event_audit_v4", {
+      target_event_id: auditEvent,
+      target_member_id: members[1].id,
+    }),
+  );
+  assert.ok(
+    ownAudit.some(
+      (a) => a.actorKind === "member" && a.after?.response === "yes",
+    ),
+  );
+  assert.ok(
+    ownAudit.some(
+      (a) =>
+        a.actorKind === "admin" &&
+        a.after?.response === "no" &&
+        a.before?.response === "yes",
+    ),
+  );
+  assert.ok(ownAudit.every((a) => a.memberId === members[1].id));
+  fail(
+    await member.rpc("get_event_audit_v4", {
+      target_event_id: auditEvent,
+      target_member_id: members[2].id,
+    }),
+  );
+  fail(
+    await admin.rpc("get_event_audit_v4", {
+      target_event_id: auditEvent,
+      target_member_id: members[1].id,
+      member_preview: true,
+    }),
+  );
+  fail(
+    await client(anon).rpc("get_event_audit_v4", {
+      target_event_id: auditEvent,
+    }),
+  );
+  assert.deepEqual(ok(await member.from("audit_log").select("id")), []);
+  pass(
+    "Immutable response provenance and private audit retain member/admin values and times",
+  );
+  ok(
+    await rpc(admin, "attendance", {
+      id: auditEvent,
+      memberId: members[4].id,
+      selected: true,
+    }),
+  );
+  audited = (await db(admin)).events.find((e) => e.id === auditEvent);
+  assert.equal(
+    audited.attendance.find((a) => a.memberId === members[4].id).status,
+    "present",
+  );
+  assert.equal(
+    audited.attendance.find((a) => a.memberId === members[4].id)
+      .attendancePercent,
+    100,
+  );
+  pass(
+    "Adding a participant automatically records full attendance on the server",
+  );
+  ok(await rpc(admin, "event", { id: auditEvent, status: "closed" }));
+  audited = (await db(admin)).events.find((e) => e.id === auditEvent);
+  assert.equal(
+    audited.attendance.find((a) => a.memberId === members[1].id)
+      .attendancePercent,
+    75,
+  );
+  assert.equal(
+    audited.attendance.find((a) => a.memberId === members[2].id).status,
+    "absent",
+  );
+  assert.equal(
+    audited.attendance.find((a) => a.memberId === members[3].id).status,
+    "present",
+  );
+  assert.equal(
+    audited.attendance.find((a) => a.memberId === members[4].id).status,
+    "present",
+  );
+  const otherRoster = (await db(other)).events
+    .find((e) => e.id === auditEvent)
+    .attendance.find((a) => a.memberId === members[1].id);
+  assert.equal(otherRoster.memberResponse.note, null);
+  assert.equal(otherRoster.adminResponse.note, null);
+  const closureAudit = ok(
+    await admin.rpc("get_event_audit_v4", { target_event_id: auditEvent }),
+  );
+  assert.ok(
+    closureAudit.some(
+      (a) => a.kind === "status" && a.after?.status === "closed",
+    ),
+  );
+  assert.ok(
+    closureAudit.some(
+      (a) =>
+        a.kind === "attendance" &&
+        a.source === "closure" &&
+        a.actorKind === "admin",
+    ),
+  );
+  assert.ok(
+    closureAudit
+      .filter((a) => a.kind === "attendance" && a.source === "closure")
+      .every(
+        (a) =>
+          !Object.keys(a.after).some((k) =>
+            ["confirmed_by", "member_id", "id"].includes(k),
+          ),
+      ),
+  );
+  pass(
+    "Performance closure prefills reported attendance, preserves manual percentages and records source in audit",
+  );
   const automatic = ok(
     await rpc(admin, "event", {
       ...input("performance"),

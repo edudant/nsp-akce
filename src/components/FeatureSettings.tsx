@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { appApi } from "../lib/dataApi";
 import { useDatabase, databaseQueryKey } from "./DataContext";
-import { Button, Card, Field, Select } from "./Ui";
+import { Button, Card, Field, Select, Dialog, Badge } from "./Ui";
+import { ListHeader, ListRow } from "./CompactList";
 import { Help } from "./Help";
 import type { Season, Song } from "../lib/domain";
 export function SeasonsPanel({ canEdit }: { canEdit: boolean }) {
@@ -16,16 +17,29 @@ export function SeasonsPanel({ canEdit }: { canEdit: boolean }) {
     active: true,
   };
   const [draft, setDraft] = useState(initial);
+  const [editing, setEditing] = useState(false);
   const save = useMutation({
     mutationFn: appApi.saveSeason,
     onSuccess: async () => {
       await query.invalidateQueries({ queryKey: databaseQueryKey });
       setDraft(initial);
+      setEditing(false);
     },
   });
   return (
     <Card className="feature-card">
-      <h2>Sezóny</h2>
+      <ListHeader
+        title="Sezóny"
+        addLabel="Nová sezóna"
+        onAdd={
+          canEdit
+            ? () => {
+                setDraft(initial);
+                setEditing(true);
+              }
+            : undefined
+        }
+      />
       <Help>
         <p>
           Sezóny zakládá admin ručně. Chodské slavnosti ještě patří do končící
@@ -33,21 +47,25 @@ export function SeasonsPanel({ canEdit }: { canEdit: boolean }) {
           mohou překrývat s taneční sezónou. Nová sezóna nemaže historické body.
         </p>
       </Help>
-      <div className="feature-list">
+      <div className="compact-list">
         {db.data?.seasons?.map((s) => (
-          <div key={s.id}>
-            <strong>{s.name}</strong> ·{" "}
-            {s.kind === "dance" ? "Taneční" : "Koledy"} · {s.dateFrom}–
-            {s.dateTo} {s.active ? "· Aktivní" : ""}{" "}
-            {canEdit && (
-              <Button variant="ghost" onClick={() => setDraft(s)}>
-                Upravit
-              </Button>
-            )}
-          </div>
+          <ListRow
+            key={s.id}
+            title={s.name}
+            subtitle={`${s.kind === "dance" ? "Taneční" : "Koledy"} · ${s.dateFrom}–${s.dateTo}`}
+            meta={s.active ? <Badge tone="green">Aktivní</Badge> : undefined}
+            onOpen={() => {
+              setDraft(s);
+              setEditing(true);
+            }}
+          />
         ))}
       </div>
-      {canEdit && (
+      <Dialog
+        open={editing}
+        title={draft.id ? "Detail sezóny" : "Nová sezóna"}
+        onClose={() => setEditing(false)}
+      >
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -117,7 +135,7 @@ export function SeasonsPanel({ canEdit }: { canEdit: boolean }) {
             )}
           </div>
         </form>
-      )}
+      </Dialog>
       {save.error && (
         <p role="alert" className="form-error">
           {save.error.message}
@@ -136,6 +154,8 @@ export function SongsSettings({ canEdit }: { canEdit: boolean }) {
     active: true,
   };
   const [draft, setDraft] = useState(initial);
+  const [editing, setEditing] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(false);
   const [catDraft, setCatDraft] = useState({
     id: undefined as string | undefined,
     name: "",
@@ -148,6 +168,7 @@ export function SongsSettings({ canEdit }: { canEdit: boolean }) {
     onSuccess: async () => {
       await refresh();
       setDraft(initial);
+      setEditing(false);
     },
   });
   const saveCategory = useMutation({
@@ -155,11 +176,23 @@ export function SongsSettings({ canEdit }: { canEdit: boolean }) {
     onSuccess: async () => {
       await refresh();
       setCatDraft({ id: undefined, name: "" });
+      setEditingCategory(false);
     },
   });
   return (
     <Card className="feature-card">
-      <h2>Písně a kategorie</h2>
+      <ListHeader
+        title="Písně"
+        addLabel="Nová píseň"
+        onAdd={
+          canEdit
+            ? () => {
+                setDraft(initial);
+                setEditing(true);
+              }
+            : undefined
+        }
+      />
       <Help>
         <p>
           Kombinace s lomítkem je jedna položka. Kategorie pomáhá při hledání.
@@ -188,7 +221,7 @@ export function SongsSettings({ canEdit }: { canEdit: boolean }) {
           ))}
         </Select>
       </div>
-      <div className="feature-list">
+      <div className="compact-list">
         {db.data?.songs
           ?.filter(
             (s) =>
@@ -198,115 +231,136 @@ export function SongsSettings({ canEdit }: { canEdit: boolean }) {
               (category === "all" || (s.categoryId ?? "") === category),
           )
           .map((s) => (
-            <div key={s.id}>
-              <span>
-                {s.name} {!s.active && "· Skrytá"}{" "}
-                <small>
-                  {
-                    db.data?.songCategories?.find((c) => c.id === s.categoryId)
-                      ?.name
-                  }
-                </small>
-              </span>
-              {canEdit && (
-                <Button variant="ghost" onClick={() => setDraft(s)}>
-                  Upravit
-                </Button>
-              )}
-            </div>
+            <ListRow
+              key={s.id}
+              title={s.name}
+              subtitle={
+                db.data?.songCategories?.find((c) => c.id === s.categoryId)
+                  ?.name ?? "Bez kategorie"
+              }
+              meta={!s.active ? <Badge>Skrytá</Badge> : undefined}
+              onOpen={() => {
+                setDraft(s);
+                setEditing(true);
+              }}
+            />
           ))}
       </div>
       {canEdit && (
         <>
-          <h3>{draft.id ? "Upravit píseň" : "Nová píseň"}</h3>
-          <form
-            className="dialog-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              save.mutate(draft);
-            }}
+          <Dialog
+            open={editing}
+            title={draft.id ? "Detail písně" : "Nová píseň"}
+            onClose={() => setEditing(false)}
           >
-            <Field label="Název písně">
-              <input
-                aria-label="Název písně"
-                required
-                value={draft.name}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              />
-            </Field>
-            <Select
-              aria-label="Kategorie upravované písně"
-              value={draft.categoryId ?? ""}
-              onChange={(e) =>
-                setDraft({ ...draft, categoryId: e.target.value || undefined })
-              }
+            <form
+              className="dialog-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                save.mutate(draft);
+              }}
             >
-              <option value="">Bez kategorie</option>
-              {db.data?.songCategories?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-            <label>
-              <input
-                type="checkbox"
-                checked={draft.active}
+              <Field label="Název písně">
+                <input
+                  aria-label="Název písně"
+                  required
+                  value={draft.name}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                />
+              </Field>
+              <Select
+                aria-label="Kategorie upravované písně"
+                value={draft.categoryId ?? ""}
                 onChange={(e) =>
-                  setDraft({ ...draft, active: e.target.checked })
+                  setDraft({
+                    ...draft,
+                    categoryId: e.target.value || undefined,
+                  })
                 }
-              />{" "}
-              Nabízet do nových sérií
-            </label>
-            <div>
-              <Button loading={save.isPending} type="submit">
-                Uložit píseň
-              </Button>{" "}
-              {draft.id && (
-                <Button variant="ghost" onClick={() => setDraft(initial)}>
-                  Nová píseň
-                </Button>
-              )}
-            </div>
-          </form>
-          <h3>Kategorie</h3>
-          <div className="feature-list">
-            {db.data?.songCategories?.map((c) => (
-              <div key={c.id}>
-                {c.name}
-                <Button variant="ghost" onClick={() => setCatDraft(c)}>
-                  Upravit
-                </Button>
+              >
+                <option value="">Bez kategorie</option>
+                {db.data?.songCategories?.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={draft.active}
+                  onChange={(e) =>
+                    setDraft({ ...draft, active: e.target.checked })
+                  }
+                />{" "}
+                Nabízet do nových sérií
+              </label>
+              <div>
+                <Button loading={save.isPending} type="submit">
+                  Uložit píseň
+                </Button>{" "}
+                {draft.id && (
+                  <Button variant="ghost" onClick={() => setDraft(initial)}>
+                    Nová píseň
+                  </Button>
+                )}
               </div>
+            </form>
+          </Dialog>
+          <ListHeader
+            title="Kategorie"
+            addLabel="Nová kategorie"
+            onAdd={() => {
+              setCatDraft({ id: undefined, name: "" });
+              setEditingCategory(true);
+            }}
+          />
+          <div className="compact-list">
+            {db.data?.songCategories?.map((c) => (
+              <ListRow
+                key={c.id}
+                title={c.name}
+                subtitle={`${db.data?.songs?.filter((s) => s.categoryId === c.id).length ?? 0} písní`}
+                onOpen={() => {
+                  setCatDraft(c);
+                  setEditingCategory(true);
+                }}
+              />
             ))}
           </div>
-          <form
-            className="feature-toolbar"
-            onSubmit={(e) => {
-              e.preventDefault();
-              saveCategory.mutate(catDraft);
-            }}
+          <Dialog
+            open={editingCategory}
+            title={catDraft.id ? "Detail kategorie" : "Nová kategorie"}
+            onClose={() => setEditingCategory(false)}
           >
-            <input
-              aria-label="Název kategorie"
-              required
-              value={catDraft.name}
-              onChange={(e) =>
-                setCatDraft({ ...catDraft, name: e.target.value })
-              }
-            />
-            <Button loading={saveCategory.isPending} type="submit">
-              {catDraft.id ? "Uložit kategorii" : "Přidat kategorii"}
-            </Button>
-            {catDraft.id && (
-              <Button
-                variant="ghost"
-                onClick={() => setCatDraft({ id: undefined, name: "" })}
-              >
-                Nová kategorie
+            <form
+              className="feature-toolbar"
+              onSubmit={(e) => {
+                e.preventDefault();
+                saveCategory.mutate(catDraft);
+              }}
+            >
+              <input
+                aria-label="Název kategorie"
+                required
+                value={catDraft.name}
+                onChange={(e) =>
+                  setCatDraft({ ...catDraft, name: e.target.value })
+                }
+              />
+              <Button loading={saveCategory.isPending} type="submit">
+                {catDraft.id ? "Uložit kategorii" : "Přidat kategorii"}
               </Button>
-            )}
-          </form>
+              {catDraft.id && (
+                <Button
+                  variant="ghost"
+                  onClick={() => setCatDraft({ id: undefined, name: "" })}
+                >
+                  Nová kategorie
+                </Button>
+              )}
+            </form>
+          </Dialog>
         </>
       )}
       {(save.error || saveCategory.error) && (

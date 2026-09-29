@@ -18,12 +18,14 @@ const api = vi.hoisted(() => ({
   saveSongSeries: vi.fn(),
   deleteSongSeries: vi.fn(),
   setPartnerWishes: vi.fn(),
+  getEventAudit: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("../lib/dataApi", () => ({ appApi: api }));
 const data = vi.hoisted(() => ({ current: null as AppDatabase | null }));
 vi.mock("./DataContext", () => ({
   databaseQueryKey: ["database"],
   useDatabase: () => ({ data: data.current }),
+  useViewMode: () => ({ memberPreview: false, scope: "test" }),
 }));
 const members: Member[] = [
   {
@@ -194,6 +196,7 @@ describe("feature UI flows", () => {
     await user.click(within(dialog).getByRole("button", { name: "Přidat" }));
     expect(api.updateAttendance).toHaveBeenCalledWith("e", "b", {
       selected: true,
+      status: "present",
     });
   });
   it("excludes songs already used on the event and confirms one series", async () => {
@@ -228,12 +231,12 @@ describe("feature UI flows", () => {
   it("creates a Friday rehearsal from 19–21 with no pair count or deadline fields", () => {
     setup();
     wrap(<EventForm loading={false} onSave={vi.fn()} />);
-    expect(screen.getByLabelText("Místo události")).toHaveValue("Stará škola");
-    expect(screen.getByLabelText("Začátek události")).toHaveValue("19:00");
-    expect(screen.getByLabelText("Konec události")).toHaveValue("21:00");
+    expect(screen.getByLabelText("Místo akce")).toHaveValue("Stará škola");
+    expect(screen.getByLabelText("Začátek akce")).toHaveValue("19:00");
+    expect(screen.getByLabelText("Konec akce")).toHaveValue("21:00");
     expect(
       new Date(
-        (screen.getByLabelText("Datum události") as HTMLInputElement).value +
+        (screen.getByLabelText("Datum akce") as HTMLInputElement).value +
           "T12:00:00",
       ).getDay(),
     ).toBe(5);
@@ -256,7 +259,7 @@ describe("feature UI flows", () => {
     wrap(<EventForm event={e} loading={false} onSave={vi.fn()} />);
     expect(screen.getByLabelText("Termín pro vyjádření")).toBeRequired();
     expect(screen.queryByLabelText("Odhad párů Starý")).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Sezóna události"), {
+    fireEvent.change(screen.getByLabelText("Sezóna akce"), {
       target: { value: "s" },
     });
     expect(screen.getByLabelText("Odhad párů Starý")).toBeInTheDocument();

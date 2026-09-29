@@ -15,7 +15,10 @@ import {
 } from "../lib/ensembleRules";
 import { appApi } from "../lib/dataApi";
 import { databaseQueryKey } from "./DataContext";
-import { Button, Card, Dialog, Select } from "./Ui";
+import { Button, Card, Dialog, Select, Badge } from "./Ui";
+import { ListHeader, ListRow } from "./CompactList";
+import { EventAudit } from "./EventAudit";
+import { formatAuditTime } from "./formatters";
 import { Help } from "./Help";
 export function ResponseEditor({
   event,
@@ -83,8 +86,10 @@ export function AttendancePanel({
   const query = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState("");
+  const [addSearch, setAddSearch] = useState("");
   const [sort, setSort] = useState<"activity" | "name">("activity");
   const [responses, setResponses] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const update = useMutation({
     mutationFn: ({
       memberId,
@@ -94,53 +99,103 @@ export function AttendancePanel({
       patch: Partial<AttendanceRecord>;
     }) => appApi.updateAttendance(event.id, memberId, patch),
     onSuccess: async () => {
-      await query.invalidateQueries({ queryKey: databaseQueryKey });
+      await Promise.all([
+        query.invalidateQueries({ queryKey: databaseQueryKey }),
+        query.invalidateQueries({ queryKey: ["event-audit"] }),
+        query.invalidateQueries({ queryKey: ["scores"] }),
+      ]);
     },
   });
-  const selectedIds = new Set(
-    event.attendance.filter((r) => r.selected).map((r) => r.memberId),
+  const relevant = (r: AttendanceRecord) =>
+    r.selected ||
+    r.status === "present" ||
+    r.status === "partial" ||
+    r.interest === "yes";
+  const rosterIds = new Set(
+    event.attendance.filter(relevant).map((r) => r.memberId),
   );
-  const selected = sortedRoster(
+  const list = sortedRoster(
     db,
-    db.members.filter((m) => selectedIds.has(m.id)),
+    db.members.filter((m) =>
+      event.attendance.some(
+        (r) =>
+          r.memberId === m.id &&
+          (responses
+            ? r.interest !== "unset" || r.status !== "unknown" || r.selected
+            : relevant(r)),
+      ),
+    ),
     search,
     sort,
     event.seasonId,
   );
   const available = sortedRoster(
     db,
-    db.members.filter((m) => m.active && !selectedIds.has(m.id)),
-    search,
+    db.members.filter((m) => m.active && !rosterIds.has(m.id)),
+    addSearch,
     sort,
     event.seasonId,
   );
-  const visibleIds = new Set(event.attendance.map((r) => r.memberId));
-  const list =
-    admin && !responses
-      ? selected
-      : sortedRoster(
-          db,
-          db.members.filter((m) => visibleIds.has(m.id)),
-          search,
-          sort,
-          event.seasonId,
-        );
+  const detailMember = db.members.find((m) => m.id === detailId);
+  const detailRecord = event.attendance.find((r) => r.memberId === detailId);
+  const setAttendance = (
+    memberId: string,
+    status: AttendanceRecord["status"],
+  ) =>
+    update.mutate({
+      memberId,
+      patch: {
+        status,
+        selected: status === "present" || status === "partial",
+        attendancePercent: status === "partial" ? 50 : undefined,
+      },
+    });
+  const attendanceSelect = (member: Member, record: AttendanceRecord) => (
+    <Select
+      aria-label={`Skutečná účast ${member.fullName}`}
+      disabled={update.isPending}
+      value={record.status}
+      onChange={(e) =>
+        setAttendance(member.id, e.target.value as AttendanceRecord["status"])
+      }
+    >
+      <option value="unknown">Nezapsáno</option>
+      <option value="present">Přítomen</option>
+      <option value="partial">Částečně</option>
+      <option value="absent">Nepřítomen</option>
+      <option value="excused">Omluven</option>
+    </Select>
+  );
   return (
     <Card className="feature-card">
-      <h2>
-        {admin ? "Účastníci" : "Účast na události"}{" "}
-        {admin && `(${selectedIds.size})`}
-      </h2>
+      <ListHeader
+        title={`Účastníci (${rosterIds.size})`}
+        addLabel="Přidat člena"
+        onAdd={
+          admin
+            ? () => {
+                setAdding(true);
+                setAddSearch("");
+              }
+            : undefined
+        }
+      />
       <Help title="Výběr a skutečná účast">
         <p>
-          Přidejte členy, kteří jsou na události přítomní. Tento výběr používá
-          generátor párů. Odebrání z výběru nemaže odpověď ani zapsanou
-          docházku; skutečnou účast upravte samostatně. Při uzavření zkoušky se
-          nezapsaná účast předvyplní z odpovědí ano/ne.
+          Přidání člena rovnou zapíše plnou účast a vybere jej pro párování.
+          Rychlou volbou změníte skutečnou účast; procenta, odpověď a historii
+          najdete po kliknutí na jméno. Nepřítomní a omluvení se do generátoru
+          nevybírají.
         </p>
         <p>
-          Aktivita řadí podle počtu absolvovaných zkoušek v sezóně události, pak
-          poslední účasti a jména. Předběžná odpověď se za aktivitu nepočítá.
+          Uzavření převezme Ano jako přítomen a Ne jako nepřítomen pouze u
+          nezapsané účasti. Zatím nevím a chybějící odpověď zůstanou nezapsané.
+          Ruční záznam správce se nepřepisuje. Původní odpověď člena i všechny
+          opravy jsou v auditu.
+        </p>
+        <p>
+          Aktivita řadí podle absolvovaných zkoušek v sezóně, poslední účasti a
+          jména.
         </p>
       </Help>
       <div className="feature-toolbar">
@@ -158,146 +213,69 @@ export function AttendancePanel({
           <option value="activity">Aktivita</option>
           <option value="name">Jméno</option>
         </Select>
-        {admin && (
-          <>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setAdding(true);
-                setSearch("");
-              }}
-            >
-              Přidat člena
-            </Button>
-            <Button variant="ghost" onClick={() => setResponses(!responses)}>
-              {responses ? "Vybraní účastníci" : "Všechny odpovědi"}
-            </Button>
-          </>
-        )}
+        <Button variant="ghost" onClick={() => setResponses(!responses)}>
+          {responses ? "Vybraní účastníci" : "Všechny odpovědi a absence"}
+        </Button>
       </div>
-      <div className="feature-list">
+      <div className="compact-list">
         {list.map((member) => {
           const record = event.attendance.find(
             (r) => r.memberId === member.id,
           )!;
-          const activity = memberActivity(db, member.id, event.seasonId);
           return (
-            <div key={member.id} className="attendance-entry">
-              <span>
-                <strong>{member.fullName}</strong>
-                <small>
-                  {activity.count} zkoušek · {interestLabels[record.interest]} ·{" "}
-                  {attendanceLabels[record.status]}
-                  {record.actualStanding
-                    ? " · skutečně stál"
-                    : record.standing
-                      ? " · má stát"
-                      : ""}
-                </small>
-                {record.note && <small>{record.note}</small>}
-              </span>
-              {admin && responses ? (
-                <div>
-                  <ResponseEditor
-                    key={`${member.id}:${record.interest}:${record.note}`}
-                    event={event}
-                    record={record}
-                    admin
-                    pending={update.isPending}
-                    onSave={(interest, note) =>
-                      update.mutate({
-                        memberId: member.id,
-                        patch: { interest, note },
-                      })
-                    }
-                  />
-                  {event.type === "performance" &&
-                    event.seasonKind !== "carols" && (
-                      <AdminWishes
-                        key={JSON.stringify(
-                          db.partnerWishes?.filter(
-                            (w) =>
-                              w.memberId === member.id &&
-                              w.eventId === event.id,
-                          ),
-                        )}
-                        db={db}
-                        event={event}
-                        member={member}
-                      />
-                    )}
-                </div>
-              ) : (
-                admin && (
-                  <>
-                    <Select
-                      aria-label={`Skutečná účast ${member.fullName}`}
-                      disabled={update.isPending}
-                      value={record.status}
-                      onChange={(e) =>
-                        update.mutate({
-                          memberId: member.id,
-                          patch: {
-                            status: e.target
-                              .value as AttendanceRecord["status"],
-                            attendancePercent:
-                              e.target.value === "partial" ? 50 : undefined,
-                          },
-                        })
-                      }
-                    >
-                      <option value="unknown">Nezapsáno</option>
-                      <option value="present">Přítomen</option>
-                      <option value="partial">Částečně</option>
-                      <option value="absent">Nepřítomen</option>
-                    </Select>
-                    {record.status === "partial" && (
-                      <label>
-                        Účast %{" "}
-                        <input
-                          key={record.attendancePercent}
-                          aria-label={`Procento účasti ${member.fullName}`}
-                          type="number"
-                          min="0.001"
-                          max="99.999"
-                          step="0.001"
-                          defaultValue={record.attendancePercent ?? 50}
-                          onBlur={(e) => {
-                            if (e.target.checkValidity())
-                              update.mutate({
-                                memberId: member.id,
-                                patch: {
-                                  status: "partial",
-                                  attendancePercent: Number(e.target.value),
-                                },
-                              });
-                          }}
-                        />
-                      </label>
-                    )}
-                    <Button
-                      disabled={update.isPending}
-                      variant="ghost"
-                      onClick={() =>
-                        update.mutate({
-                          memberId: member.id,
-                          patch: { selected: false },
-                        })
-                      }
-                    >
-                      Odebrat
-                    </Button>
-                  </>
-                )
+            <ListRow
+              key={member.id}
+              disabled={update.isPending}
+              title={member.fullName}
+              subtitle={
+                <>
+                  {record.memberResponse
+                    ? `Člen: ${interestLabels[record.memberResponse.interest]} · ${formatAuditTime(record.memberResponse.at)}`
+                    : `Odpověď: ${interestLabels[record.interest]}`}
+                  {record.adminResponse && (
+                    <span>
+                      {" "}
+                      · Odpověď správce:{" "}
+                      {interestLabels[record.adminResponse.interest]} ·{" "}
+                      {formatAuditTime(record.adminResponse.at)}
+                    </span>
+                  )}
+                  {record.adminChangedAt && (
+                    <span>
+                      {" "}
+                      · Správce: {formatAuditTime(record.adminChangedAt)}
+                    </span>
+                  )}
+                  {record.standing && " · má stát"}
+                  {record.actualStanding && " · skutečně stál"}
+                </>
+              }
+              meta={
+                !admin ? (
+                  <Badge>
+                    {attendanceLabels[record.status]}
+                    {record.status === "partial" &&
+                      ` ${record.attendancePercent} %`}
+                  </Badge>
+                ) : undefined
+              }
+              onOpen={() => setDetailId(member.id)}
+            >
+              {admin && (
+                <>
+                  {attendanceSelect(member, record)}
+                  {record.status === "partial" && (
+                    <small>{record.attendancePercent ?? 50} %</small>
+                  )}
+                </>
               )}
-            </div>
+            </ListRow>
           );
         })}
       </div>
-      {list.length === 0 && (
+      {!list.length && (
         <p>
-          Žádní vybraní členové. Přidejte je ze seznamu všech nebo uzavřete
-          zkoušku pro předvyplnění účasti.
+          Zatím žádní účastníci. Přidejte člena nebo zobrazte všechny odpovědi.
         </p>
       )}
       {update.error && (
@@ -305,6 +283,131 @@ export function AttendancePanel({
           {update.error.message}
         </p>
       )}
+      <Dialog
+        open={!!detailMember && !!detailRecord}
+        title={detailMember?.fullName ?? "Detail účastníka"}
+        onClose={() => setDetailId(null)}
+      >
+        {detailMember && detailRecord && (
+          <>
+            <p>
+              {memberActivity(db, detailMember.id, event.seasonId).count}{" "}
+              absolvovaných zkoušek v sezóně
+            </p>
+            {detailRecord.memberResponse && (
+              <p>
+                <strong>Původní odpověď člena:</strong>{" "}
+                {interestLabels[detailRecord.memberResponse.interest]} ·{" "}
+                {formatAuditTime(detailRecord.memberResponse.at)}
+                {detailRecord.memberResponse.note &&
+                  ` · ${detailRecord.memberResponse.note}`}
+              </p>
+            )}
+            {detailRecord.adminResponse && (
+              <p>
+                <strong>Poslední odpověď správce:</strong>{" "}
+                {interestLabels[detailRecord.adminResponse.interest]} ·{" "}
+                {formatAuditTime(detailRecord.adminResponse.at)}
+                {detailRecord.adminResponse.note &&
+                  ` · ${detailRecord.adminResponse.note}`}
+              </p>
+            )}
+            <h3>Aktuální odpověď</h3>
+            {admin ? (
+              <ResponseEditor
+                key={`${detailId}:${detailRecord.interest}:${detailRecord.note}`}
+                event={event}
+                record={detailRecord}
+                admin
+                pending={update.isPending}
+                onSave={(interest, note) =>
+                  update.mutate({
+                    memberId: detailMember.id,
+                    patch: { interest, note },
+                  })
+                }
+              />
+            ) : (
+              <p>
+                {interestLabels[detailRecord.interest]}
+                {detailRecord.note && ` · ${detailRecord.note}`}
+              </p>
+            )}
+            <h3>Skutečná účast</h3>
+            {admin ? (
+              <>
+                {attendanceSelect(detailMember, detailRecord)}
+                {detailRecord.status === "partial" && (
+                  <label className="field">
+                    Účast %
+                    <input
+                      aria-label={`Procento účasti ${detailMember.fullName}`}
+                      disabled={update.isPending}
+                      type="number"
+                      min="0.001"
+                      max="99.999"
+                      step="0.001"
+                      defaultValue={detailRecord.attendancePercent ?? 50}
+                      onBlur={(e) => {
+                        if (
+                          e.target.checkValidity() &&
+                          Number(e.target.value) !==
+                            detailRecord.attendancePercent
+                        )
+                          update.mutate({
+                            memberId: detailMember.id,
+                            patch: {
+                              status: "partial",
+                              attendancePercent: Number(e.target.value),
+                            },
+                          });
+                      }}
+                    />
+                  </label>
+                )}
+                <p>Změny skutečné účasti se ukládají ihned.</p>
+                <Button
+                  variant="ghost"
+                  disabled={update.isPending}
+                  onClick={() => {
+                    update.mutate({
+                      memberId: detailMember.id,
+                      patch: { selected: false, status: "absent" },
+                    });
+                    setDetailId(null);
+                  }}
+                >
+                  Odebrat z účasti
+                </Button>
+                {event.type === "performance" &&
+                  event.seasonKind !== "carols" && (
+                    <AdminWishes
+                      key={JSON.stringify(
+                        db.partnerWishes?.filter(
+                          (w) =>
+                            w.memberId === detailMember.id &&
+                            w.eventId === event.id,
+                        ),
+                      )}
+                      db={db}
+                      event={event}
+                      member={detailMember}
+                    />
+                  )}
+              </>
+            ) : (
+              <p>
+                {attendanceLabels[detailRecord.status]}
+                {detailRecord.status === "partial" &&
+                  ` ${detailRecord.attendancePercent} %`}
+              </p>
+            )}
+            {(admin || detailMember.id === db.myMemberId) && (
+              <EventAudit eventId={event.id} memberId={detailMember.id} />
+            )}
+          </>
+        )}
+      </Dialog>
       {admin && (
         <Dialog
           title="Přidat účastníky"
@@ -316,8 +419,8 @@ export function AttendancePanel({
               autoFocus
               aria-label="Hledat člena k přidání"
               placeholder="Hledat jméno…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={addSearch}
+              onChange={(e) => setAddSearch(e.target.value)}
             />
             <Select
               aria-label="Řazení při přidávání"
@@ -328,11 +431,11 @@ export function AttendancePanel({
               <option value="name">Jméno</option>
             </Select>
           </div>
-          <div className="feature-list">
+          <div className="compact-list">
             {available.map((m) => (
-              <div key={m.id}>
-                <span>
-                  {m.fullName}
+              <div className="compact-row" key={m.id}>
+                <span className="compact-row__text">
+                  <strong>{m.fullName}</strong>
                   <small>
                     {memberActivity(db, m.id, event.seasonId).count} zkoušek ·{" "}
                     {
@@ -344,9 +447,13 @@ export function AttendancePanel({
                   </small>
                 </span>
                 <Button
+                  size="small"
                   disabled={update.isPending}
                   onClick={() =>
-                    update.mutate({ memberId: m.id, patch: { selected: true } })
+                    update.mutate({
+                      memberId: m.id,
+                      patch: { selected: true, status: "present" },
+                    })
                   }
                 >
                   Přidat

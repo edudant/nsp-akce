@@ -93,9 +93,9 @@ export function EventForm({
   return (
     <form className="dialog-form" onSubmit={submit}>
       {!event && (
-        <Field label="Typ události">
+        <Field label="Typ akce">
           <Select
-            aria-label="Typ události"
+            aria-label="Typ akce"
             value={type}
             onChange={(e) => {
               const next = e.target.value as EventType;
@@ -111,7 +111,7 @@ export function EventForm({
       )}
       <Field label="Sezóna">
         <Select
-          aria-label="Sezóna události"
+          aria-label="Sezóna akce"
           required
           value={seasonId}
           onChange={(e) => setSeasonId(e.target.value)}
@@ -127,7 +127,7 @@ export function EventForm({
       </Field>
       <Field label="Název">
         <input
-          aria-label="Název události"
+          aria-label="Název akce"
           required
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -136,7 +136,7 @@ export function EventForm({
       <div className="form-grid form-grid--3">
         <Field label="Datum">
           <input
-            aria-label="Datum události"
+            aria-label="Datum akce"
             required
             type="date"
             value={date}
@@ -145,7 +145,7 @@ export function EventForm({
         </Field>
         <Field label="Začátek">
           <input
-            aria-label="Začátek události"
+            aria-label="Začátek akce"
             required
             type="time"
             value={start}
@@ -154,7 +154,7 @@ export function EventForm({
         </Field>
         <Field label="Konec">
           <input
-            aria-label="Konec události"
+            aria-label="Konec akce"
             required
             type="time"
             value={end}
@@ -164,7 +164,7 @@ export function EventForm({
       </div>
       <Field label="Místo">
         <input
-          aria-label="Místo události"
+          aria-label="Místo akce"
           required
           value={location}
           onChange={(e) => setLocation(e.target.value)}
@@ -249,7 +249,7 @@ export function EventForm({
       </label>
       <Help title="Zpívání a série">
         <p>
-          Na události lze sestavit více sérií. Každá píseň se na akci používá
+          Na akci lze sestavit více sérií. Každá píseň se na akci používá
           jednou. Sérii členové uvidí až po potvrzení adminem.
         </p>
       </Help>
@@ -268,7 +268,7 @@ export function EventForm({
         </p>
       )}
       <Button loading={loading} type="submit">
-        {event ? "Uložit událost" : "Vytvořit událost"}
+        {event ? "Uložit akci" : "Vytvořit akci"}
       </Button>
     </form>
   );

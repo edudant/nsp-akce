@@ -42,7 +42,9 @@ const newPage = async (session, width = 1440) => {
 };
 const go = async (page, route, heading) => {
   await page.goto(base + "#" + route);
-  await page.getByRole("heading", { name: heading, exact: true }).waitFor();
+  await page
+    .getByRole("heading", { name: heading, exact: true, level: 1 })
+    .waitFor();
 };
 const noOverflow = async (page) =>
   assert.ok(
@@ -76,10 +78,8 @@ try {
     "/udalosti/" + fixture.performance,
     db.events.find((e) => e.id === fixture.performance).title,
   );
-  assert.equal(
-    await admin.getByRole("button", { name: "Odebrat", exact: true }).count(),
-    4,
-  );
+  await admin.getByRole("tab", { name: "Účastníci", exact: true }).click();
+  assert.equal(await admin.locator("main .compact-row").count(), 4);
   await admin
     .getByRole("button", { name: "Přidat člena", exact: true })
     .click();
@@ -143,37 +143,32 @@ try {
     );
   }
   await dialog.getByRole("button", { name: "Zavřít", exact: true }).click();
-  await go(admin, "/udalosti", "Události");
-  await admin
-    .getByRole("button", { name: "Nová událost", exact: true })
-    .click();
+  await go(admin, "/udalosti", "Akce");
+  await admin.getByRole("button", { name: "Nová akce", exact: true }).click();
   assert.equal(
-    await admin.getByLabel("Místo události").inputValue(),
+    await admin.getByLabel("Místo akce").inputValue(),
     "Stará škola",
   );
-  assert.equal(
-    await admin.getByLabel("Začátek události").inputValue(),
-    "19:00",
-  );
-  assert.equal(await admin.getByLabel("Konec události").inputValue(), "21:00");
+  assert.equal(await admin.getByLabel("Začátek akce").inputValue(), "19:00");
+  assert.equal(await admin.getByLabel("Konec akce").inputValue(), "21:00");
   assert.equal(
     new Date(
-      (await admin.getByLabel("Datum události").inputValue()) + "T12:00:00",
+      (await admin.getByLabel("Datum akce").inputValue()) + "T12:00:00",
     ).getDay(),
     5,
   );
   await admin
     .getByRole("dialog")
-    .getByLabel("Typ události")
+    .getByLabel("Typ akce")
     .selectOption("performance");
   const title = "Browser performance " + Date.now();
-  await admin.getByLabel("Název události").fill(title);
+  await admin.getByLabel("Název akce").fill(title);
   await admin.getByLabel("Termín pro vyjádření").fill("2026-12-01T18:00");
   await admin.getByLabel("Odhad párů Starý").fill("1");
   await admin.getByLabel("Odhad párů Mladý").fill("0");
   await admin.getByLabel("Bude se zpívat").check();
   await admin
-    .getByRole("button", { name: "Vytvořit událost", exact: true })
+    .getByRole("button", { name: "Vytvořit akci", exact: true })
     .click();
   await admin.getByRole("dialog").waitFor({ state: "hidden" });
   await admin.getByText(title, { exact: true }).first().click();
@@ -190,11 +185,15 @@ try {
       .count(),
     1,
   );
+  await member.getByRole("tab", { name: "Účastníci", exact: true }).click();
   assert.ok(
     (await member.locator("body").innerText()).includes(
       "Seznam odpovědí ostatních",
     ),
   );
+  await member
+    .getByRole("tab", { name: "Detail a moje účast", exact: true })
+    .click();
   await member.getByLabel("Odpověď").selectOption("maybe");
   assert.equal(
     await member.getByLabel("Poznámka k odpovědi").getAttribute("required"),
@@ -203,6 +202,7 @@ try {
   await member.getByLabel("Poznámka k odpovědi").fill("Čekám na potvrzení");
   await member.getByRole("button", { name: "Uložit odpověď" }).click();
   pass("Member sees own open response and maybe requires a note");
+  await admin.getByRole("tab", { name: "Účastníci", exact: true }).click();
   await admin
     .getByRole("button", { name: "Přidat člena", exact: true })
     .click();
@@ -249,6 +249,7 @@ try {
     "Performance sliders, directional wishes, main/below-line pairs, manual editor, draft and publication",
   );
   await go(admin, route, title);
+  await admin.getByRole("tab", { name: "Pásma", exact: true }).click();
   await admin.getByLabel("Název nové série").fill("Browser songs");
   await admin.getByRole("button", { name: "Vytvořit sérii" }).click();
   const series = admin.locator(".song-series").filter({
@@ -265,6 +266,7 @@ try {
   await admin.getByLabel("Název série Browser songs").waitFor();
   await member.reload();
   await member.getByRole("heading", { name: title, exact: true }).waitFor();
+  await member.getByRole("tab", { name: "Pásma", exact: true }).click();
   assert.equal(
     await member.getByText("Browser songs", { exact: false }).count(),
     0,
@@ -277,6 +279,7 @@ try {
     .getByRole("heading", { name: "Browser songs · Potvrzená", exact: true })
     .waitFor();
   await member.reload();
+  await member.getByRole("tab", { name: "Pásma", exact: true }).click();
   await member
     .getByRole("heading", { name: "Browser songs · Potvrzená", exact: true })
     .waitFor();
@@ -292,35 +295,120 @@ try {
   pass(
     "Series drafts are hidden; confirmed series are visible on mobile without overflow",
   );
-  await admin.getByLabel("Stav události").selectOption("confirmed");
+  await admin
+    .getByRole("button", { name: "Potvrdit akci", exact: true })
+    .click();
+  const stateDialog = admin.getByRole("dialog");
+  assert.ok((await stateDialog.innerText()).includes("Odpovědi se uzamknou"));
+  await stateDialog
+    .getByRole("button", { name: "Potvrdit akci", exact: true })
+    .click();
+  await admin
+    .getByRole("button", { name: "Uzavřít akci", exact: true })
+    .waitFor();
   await member.reload();
   await member.getByLabel("Odpověď").waitFor();
   assert.equal(await member.getByLabel("Odpověď").isDisabled(), true);
-  await member
-    .getByRole("heading", { name: "Účast na události", exact: true })
-    .waitFor();
+  await member.getByRole("tab", { name: "Účastníci", exact: true }).click();
+  await member.getByRole("heading", { name: /Účastníci \(4\)/ }).waitFor();
   pass("Confirmation exposes roster and locks member response");
+  assert.equal(
+    await admin
+      .getByRole("button", { name: "Uzavřít akci", exact: true })
+      .isDisabled(),
+    true,
+  );
+  await admin
+    .getByRole("button", { name: "Upravit akci", exact: true })
+    .click();
+  await admin
+    .getByLabel("Datum akce")
+    .fill(new Date(Date.now() - 86400000).toISOString().slice(0, 10));
+  await admin.getByRole("button", { name: "Uložit akci", exact: true }).click();
+  await admin.getByRole("dialog").waitFor({ state: "hidden" });
+  await admin
+    .getByRole("button", { name: "Uzavřít akci", exact: true })
+    .click();
+  assert.ok((await admin.getByRole("dialog").innerText()).includes("Ručně"));
+  await admin
+    .getByRole("dialog")
+    .getByRole("button", { name: "Uzavřít akci", exact: true })
+    .click();
+  await admin
+    .getByRole("button", { name: "Znovu otevřít akci", exact: true })
+    .waitFor();
+  await admin
+    .getByRole("tab", { name: "Detail a moje účast", exact: true })
+    .click();
+  await admin.getByText("Audit akce", { exact: true }).click();
+  await admin.locator(".audit-list li").first().waitFor();
+  assert.ok(
+    (await admin.locator(".audit-list").innerText()).includes("Uzavřená"),
+  );
+  pass(
+    "Explicit state buttons explain confirmation/closure, prevent premature closure and retain state audit",
+  );
+
   await go(
     admin,
     "/udalosti/" + fixture.rehearsal,
     db.events.find((e) => e.id === fixture.rehearsal).title,
   );
+  await admin.getByRole("tab", { name: "Účastníci", exact: true }).click();
   await admin
     .getByLabel("Skutečná účast " + own.fullName)
     .selectOption("partial");
+  await admin
+    .getByRole("button", { name: "Detail: " + own.fullName, exact: true })
+    .click();
   await admin.getByLabel("Procento účasti " + own.fullName).fill("62.5");
+  const percentSaved = admin.waitForResponse(
+    (r) =>
+      r.url().includes("mutate_app_v3") &&
+      r.request().postDataJSON()?.payload?.attendancePercent === 62.5,
+  );
   await admin.getByLabel("Procento účasti " + own.fullName).press("Tab");
+  assert.equal((await percentSaved).status(), 200);
   await admin.waitForFunction(
     () =>
       !document.querySelector('select[aria-label^="Skutečná účast"]')?.disabled,
   );
+  await admin
+    .getByRole("dialog")
+    .getByRole("button", { name: "Zavřít", exact: true })
+    .click();
   await admin.reload();
+  await admin.getByRole("tab", { name: "Účastníci", exact: true }).click();
+  await admin
+    .getByRole("button", { name: "Detail: " + own.fullName, exact: true })
+    .click();
   await admin.getByLabel("Procento účasti " + own.fullName).waitFor();
   assert.equal(
     await admin.getByLabel("Procento účasti " + own.fullName).inputValue(),
     "62.5",
   );
-  pass("Admin percentage attendance persists after reload");
+  await admin
+    .getByRole("dialog")
+    .getByRole("heading", { name: "Historie změn", exact: true })
+    .waitFor();
+  await admin.getByRole("dialog").locator(".audit-list li").first().waitFor();
+  assert.ok(
+    (
+      await admin.getByRole("dialog").locator(".audit-list").innerText()
+    ).includes("Člen"),
+  );
+  assert.ok(
+    (
+      await admin.getByRole("dialog").locator(".audit-list").innerText()
+    ).includes("Správce"),
+  );
+  await admin
+    .getByRole("dialog")
+    .getByRole("button", { name: "Zavřít", exact: true })
+    .click();
+  pass(
+    "Participant detail persists percentage attendance and shows original member/admin audit",
+  );
   await admin
     .getByRole("link", { name: "Generátor párů", exact: true })
     .click();
@@ -339,6 +427,7 @@ try {
     db.events.find((e) => e.id === fixture.rehearsal).title,
   );
   await member.reload();
+  await member.getByRole("tab", { name: "Páry", exact: true }).click();
   await member
     .getByRole("heading", { name: "Uložené sady párů", exact: true })
     .waitFor();
@@ -349,28 +438,60 @@ try {
       ).length >= 3,
   );
   pass("Random rehearsal generator publishes an additional visible set");
-  await go(admin, "/nastaveni", "Nastavení");
-  await admin
-    .getByRole("button", { name: "Písně a kategorie", exact: true })
-    .click();
+  await go(admin, "/nastaveni/pisne", "Písně");
   await admin.getByLabel("Hledat píseň").fill("Trumpetří");
   assert.ok(
     (await admin.locator("main").innerText()).includes(
       "Dyž sem já mou milou ponyjprv vidíl / Trumpetří",
     ),
   );
+  assert.equal(await admin.getByLabel("Název písně").count(), 0);
   await admin
-    .getByRole("button", { name: "Sezona a události", exact: true })
+    .getByRole("button", {
+      name: "Detail: Dyž sem já mou milou ponyjprv vidíl / Trumpetří",
+      exact: true,
+    })
     .click();
+  await admin.getByLabel("Název písně").waitFor();
+  await admin
+    .getByRole("dialog")
+    .getByRole("button", { name: "Zavřít", exact: true })
+    .click();
+  await go(admin, "/nastaveni/sezony", "Sezóny");
+  assert.equal(await admin.getByLabel("Typ sezóny").count(), 0);
+  await admin.getByRole("button", { name: "Nová sezóna", exact: true }).click();
   assert.equal(await admin.getByLabel("Typ sezóny").count(), 1);
+  await admin
+    .getByRole("dialog")
+    .getByRole("button", { name: "Zavřít", exact: true })
+    .click();
+  await go(admin, "/nastaveni/pasma", "Pásma");
+  await admin.getByRole("button", { name: "Nové pásmo", exact: true }).click();
+  await admin.getByLabel("Název pásma").fill("Browser band " + Date.now());
+  await admin
+    .getByRole("button", { name: "Uložit pásmo", exact: true })
+    .click();
+  await admin.getByRole("dialog").waitFor({ state: "hidden" });
+  await go(admin, "/nastaveni/pristupy", "Přístupy");
+  await admin
+    .getByRole("button", { name: "Detail: " + own.fullName, exact: true })
+    .click();
+  assert.equal(
+    await admin.getByLabel("E-mail přístupu").inputValue(),
+    fixture.memberEmail,
+  );
+  await admin
+    .getByRole("dialog")
+    .getByRole("button", { name: "Zavřít", exact: true })
+    .click();
   pass(
-    "Settings include catalogue with compound song names and manual seasons",
+    "Settings have direct menu routes and uniform compact lists with detail/new forms",
   );
   await admin
     .getByRole("button", { name: "Zobrazit jako člen", exact: true })
     .click();
   await admin
-    .getByRole("button", { name: "Zpět do administrace", exact: true })
+    .getByRole("button", { name: "Zobrazit jako správce", exact: true })
     .waitFor();
   assert.equal(await admin.evaluate(() => location.hash), "#/");
   assert.equal(
@@ -384,10 +505,11 @@ try {
   await go(admin, route, title);
   assert.equal(
     await admin
-      .getByRole("button", { name: "Upravit událost", exact: true })
+      .getByRole("button", { name: "Upravit akci", exact: true })
       .count(),
     0,
   );
+  await admin.getByRole("tab", { name: "Pásma", exact: true }).click();
   await admin
     .getByRole("heading", { name: "Browser songs · Potvrzená", exact: true })
     .waitFor();
@@ -405,14 +527,17 @@ try {
     animations: "disabled",
   });
   await admin
-    .getByRole("button", { name: "Zpět do administrace", exact: true })
+    .getByRole("button", { name: "Otevřít nabídku", exact: true })
+    .click();
+  await admin
+    .getByRole("button", { name: "Zobrazit jako správce", exact: true })
     .click();
   await admin
     .getByRole("button", { name: "Zobrazit jako člen", exact: true })
-    .waitFor();
+    .waitFor({ state: "attached" });
   await go(admin, route, title);
   await admin
-    .getByRole("button", { name: "Upravit událost", exact: true })
+    .getByRole("button", { name: "Upravit akci", exact: true })
     .waitFor();
   await admin.setViewportSize({ width: 1440, height: 1000 });
   assert.equal(
@@ -442,11 +567,12 @@ try {
   await shared.getByRole("button", { name: /Otevřít členský přehled/ }).click();
   await shared.locator(".app-layout").waitFor();
   await go(shared, route, title);
+  await shared.getByRole("tab", { name: "Pásma", exact: true }).click();
   await shared
     .getByRole("heading", { name: "Browser songs · Potvrzená" })
     .waitFor();
   assert.equal(
-    await shared.getByRole("button", { name: "Upravit událost" }).count(),
+    await shared.getByRole("button", { name: "Upravit akci" }).count(),
     0,
   );
   await noOverflow(shared);
