@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { appApi } from "../lib/dataApi";
 import { useDatabase, databaseQueryKey } from "../components/DataContext";
@@ -7,7 +7,7 @@ import { PageHeader } from "../components/PageHeader";
 import { Button, Card, Select } from "../components/Ui";
 import { Help } from "../components/Help";
 import { AttendancePanel } from "../components/AttendancePanel";
-import { AppLink } from "../components/Router";
+import { AppLink, navigate } from "../components/Router";
 import {
   pairingParticipants,
   defaultTuning,
@@ -17,13 +17,27 @@ import {
 import { generatePairsAsync } from "../lib/pairingClient";
 import { memberGroups } from "../lib/ensembleRules";
 import type { AppDatabase, EnsembleEvent, DancePair } from "../lib/domain";
+function readPairingEventId() {
+  return (
+    new URLSearchParams(window.location.hash.split("?")[1] ?? "").get(
+      "event",
+    ) ?? ""
+  );
+}
+function subscribePairingEvent(callback: () => void) {
+  window.addEventListener("hashchange", callback);
+  window.addEventListener("popstate", callback);
+  return () => {
+    window.removeEventListener("hashchange", callback);
+    window.removeEventListener("popstate", callback);
+  };
+}
 export function PairingPage({ canEdit }: { canEdit: boolean }) {
   const db = useDatabase();
-  const [eventId, setEventId] = useState(
-    () =>
-      new URLSearchParams(window.location.hash.split("?")[1] ?? "").get(
-        "event",
-      ) ?? "",
+  const eventId = useSyncExternalStore(
+    subscribePairingEvent,
+    readPairingEventId,
+    () => "",
   );
   if (db.isLoading) return <LoadingState />;
   if (db.isError || !db.data)
@@ -41,7 +55,9 @@ export function PairingPage({ canEdit }: { canEdit: boolean }) {
       <Select
         aria-label="Akce pro párování"
         value={event?.id ?? ""}
-        onChange={(e) => setEventId(e.target.value)}
+        onChange={(e) =>
+          navigate(`/pary?event=${encodeURIComponent(e.target.value)}`)
+        }
       >
         {events.map((e) => (
           <option value={e.id} key={e.id}>

@@ -216,8 +216,8 @@ try {
     actualPairs: [{ id: "p2", leaderId: "a", followerId: "x", actual: true }],
     pairs: [],
   });
-  ah.attendance.forEach(r => r.actualStanding = r.memberId === "a");
-  bh.attendance.forEach(r => r.actualStanding = r.memberId === "b");
+  ah.attendance.forEach((r) => (r.actualStanding = r.memberId === "a"));
+  bh.attendance.forEach((r) => (r.actualStanding = r.memberId === "b"));
   let count = 0;
   for (let seed = 0; seed < 20; seed++) {
     const r = generateSeasonPairs(

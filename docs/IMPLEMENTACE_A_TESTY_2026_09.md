@@ -181,7 +181,10 @@ datum; aktuálně regenerovaná akce neovlivňuje vlastní historii ani body.
 
 Výpočet běží ve workeru s limitem, UI ukazuje výsledek/chybu i počty dostupných
 členů. Admin vidí vysvětlení párů, změna stání zachovává ostatní ruční úpravy.
-Migrace: `20260929160000_pairing_reality_and_history.sql`. Ověřeno 107 UI/unit
+Migrace: `20260929160000_pairing_reality_and_history.sql`. Ověřeno 108 UI/unit
 testů, 26 integration a 17 browser scénářů. Oracle test pokrývá 81 konfigurací
 skupin a zákazů. Zátěžový příklad 50 členů vytvořil 25 párů bez upozornění
 (cca 200 ms vystoupení, 10 ms zkouška na lokálním stroji).
+
+Produkční build navíc ověřen na mobilu 320 px: načtení workeru, generování
+staré akce, přepnutí akce přes URL bez reloadu a vysvětlení prázdného výsledku.

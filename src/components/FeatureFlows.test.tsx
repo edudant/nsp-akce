@@ -136,6 +136,23 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("feature UI flows", () => {
+  it("switches pairing action when the URL query changes without a page reload", () => {
+    const db = setup();
+    db.events.push(
+      fixture({ id: "older", title: "Starší akce", status: "closed" }),
+    );
+    const initial = window.location.hash;
+    window.location.hash = "/pary?event=e";
+    wrap(<PairingPage canEdit />);
+    expect(screen.getByLabelText("Akce pro párování")).toHaveValue("e");
+    window.location.hash = "/pary?event=older";
+    fireEvent(window, new HashChangeEvent("hashchange"));
+    expect(screen.getByLabelText("Akce pro párování")).toHaveValue("older");
+    expect(
+      screen.getByText(/Páruje se podle zapsané skutečné účasti/),
+    ).toBeVisible();
+    window.location.hash = initial;
+  });
   it("shows an explicit empty generation result and the corrective action", async () => {
     setup(fixture({ status: "closed" }));
     api.generatePairs.mockResolvedValue({
@@ -204,9 +221,7 @@ describe("feature UI flows", () => {
     await user.click(screen.getByRole("button", { name: "Vygenerovat návrh" }));
     await screen.findByLabelText("Muž v páru 1");
     await user.click(screen.getByRole("checkbox", { name: "Pod čarou" }));
-    await user.click(
-      screen.getByRole("checkbox", { name: "Další muž" }),
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Další muž" }));
     expect(
       await screen.findByText(/Ostatní ruční úpravy zůstaly/),
     ).toBeVisible();
