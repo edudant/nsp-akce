@@ -664,6 +664,53 @@ export function generatePairings(request: PairingRequest): PairingResult {
   };
 }
 
+/** Evaluate every allowed edge without committing members to a matching. */
+export function scorePairingCandidates(request: PairingRequest): Array<{
+  memberAId: string;
+  memberBId: string;
+  score: number;
+  explanation: string;
+}> {
+  const weights = { ...DEFAULT_PAIRING_WEIGHTS, ...request.weights };
+  const members = request.members.filter(
+    (m) => m.active !== false && m.available !== false,
+  );
+  const roles = request.compatibleRolePairs ?? [];
+  const asOf = resolveAsOf(request.asOf, request.history ?? [], members);
+  const preferences = buildPreferenceLookup(request.preferences ?? [], asOf);
+  const wishes = buildPartnerWishLookup(request.partnerWishes ?? []);
+  const history = buildHistoryLookup(request.history ?? [], weights);
+  const result = [];
+  for (const a of members)
+    for (const b of members) {
+      if (
+        a.id === b.id ||
+        !roles.some(([left, right]) => a.role === left && b.role === right)
+      )
+        continue;
+      const key = pairKey(a.id, b.id),
+        preference = preferences.get(key);
+      if (preference?.kind === "forbidden") continue;
+      const cost = calculatePairCost({
+        memberA: a,
+        memberB: b,
+        round: 1,
+        seed: String(request.seed ?? "nsp-pairing"),
+        variant: request.variant ?? 0,
+        asOf,
+        history: history.get(key),
+        preference,
+        partnerWish: wishes.get(key),
+        sameEventRepeatCount: 0,
+        eventByeCounts: new Map(),
+        weights,
+        locked: false,
+      });
+      result.push({ memberAId: a.id, memberBId: b.id, ...cost });
+    }
+  return result;
+}
+
 function resolvePairingBlocks(
   requestedBlocks: readonly PairingBlock[] | undefined,
   legacyRounds: number,

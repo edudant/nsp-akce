@@ -9,11 +9,12 @@ import { Help } from "../components/Help";
 import { AttendancePanel } from "../components/AttendancePanel";
 import { AppLink } from "../components/Router";
 import {
-  generateSeasonPairs,
+  pairingParticipants,
   defaultTuning,
   validatePairs,
   type PairingTuning,
 } from "../lib/seasonPairing";
+import { generatePairsAsync } from "../lib/pairingClient";
 import { memberGroups } from "../lib/ensembleRules";
 import type { AppDatabase, EnsembleEvent, DancePair } from "../lib/domain";
 export function PairingPage({ canEdit }: { canEdit: boolean }) {
@@ -89,17 +90,41 @@ function PairingEditor({
   const selection = useMutation({
     mutationFn: ({ id, standing }: { id: string; standing: boolean }) =>
       appApi.updateAttendance(event.id, id, { standing }),
-    onSuccess: async () => {
-      setDraft(null);
+    onSuccess: async (_, { id, standing }) => {
+      if (standing)
+        setDraft((current) =>
+          (current ?? event.pairs).filter(
+            (p) => p.leaderId !== id && p.followerId !== id,
+          ),
+        );
+      setMessage(
+        "Výběr stání je uložený. Ostatní ruční úpravy zůstaly zachované; další členy doplníte novým generováním.",
+      );
       await query.invalidateQueries({ queryKey: databaseQueryKey });
     },
   });
-  const selected = db.members.filter((m) =>
-    event.attendance.some((r) => r.memberId === m.id && r.selected && !["absent", "excused"].includes(r.status)),
+  const generate = useMutation({
+    mutationFn: () =>
+      generatePairsAsync(db, event, tuning, crypto.randomUUID()),
+    onSuccess: (result) => {
+      setDraft(result.pairs);
+      setWarnings(result.warnings);
+      setMessage(
+        `Návrh vytvořen: ${result.pairs.filter((p) => !p.belowLine).length} hlavních párů, ${result.pairs.filter((p) => p.belowLine).length} pod čarou, ${result.standingIds.length} bez páru.`,
+      );
+    },
+  });
+  const selected = pairingParticipants(db, event);
+  const eligible = selected.filter(
+    (m) => !event.attendance.find((r) => r.memberId === m.id)?.standing,
   );
   const used = new Set(pairs.flatMap((p) => [p.leaderId, p.followerId]));
   const change = (index: number, patch: Partial<DancePair>) =>
-    setDraft(pairs.map((p, i) => (i === index ? { ...p, ...patch } : p)));
+    setDraft(
+      pairs.map((p, i) =>
+        i === index ? { ...p, ...patch, reason: "Ručně upravený pár." } : p,
+      ),
+    );
   return (
     <>
       {admin && (
@@ -117,7 +142,9 @@ function PairingEditor({
                   Random párování používá vybrané přítomné členy, kompatibilní
                   role a skupiny. Explicitní zákazy vždy platí. Doplnit Mladé
                   mohou jen členové s oběma zařazeními. Body, zkušenost a
-                  historie se zde nepoužívají. Uložené sady neovlivňují historii
+                  historie se zde nepoužívají. Při doplnění může generátor
+                  přesunout člena s oběma zařazeními do Mladých, i když mohl
+                  tancovat ve Starých. Uložené sady neovlivňují historii
                   skutečných párů.
                 </p>
               ) : (
@@ -126,16 +153,18 @@ function PairingEditor({
                     Posuvníky nastavují sílu pravidel. Preference respektují
                     přání zvolené strany; Body zvýhodňují přání členů s vyšší
                     docházkou. Střídání omezuje opakované skutečné páry a stání
-                    v sezóně akce. Zkušenost podporuje začátečníky se
-                    zkušenými.
+                    v sezóně akce. Stání se počítá pouze z potvrzené skutečné
+                    evidence. Zkušenost podporuje začátečníky se zkušenými.
                   </p>
                   <p>
                     Generátor cílí na odhad {event.oldPairs ?? 0} Starých a{" "}
                     {event.youngPairs ?? 0} Mladých párů; ostatní jsou pod
-                    čarou. Tvrdá omezení (role, skupiny, zákazy) se neporušují.
-                    Přání se nemusí splnit kvůli konfliktu s jiným pravidlem
-                    nebo nedostatku partnerů. Ruční úpravy jsou součástí návrhu;
-                    členové je vidí až po zveřejnění.
+                    čarou. Skupiny se řeší společně: nejprve naplnění odhadu,
+                    potom maximální počet všech párů, nakonec pravidla
+                    posuvníků. Tvrdá omezení (role, skupiny, zákazy) se
+                    neporušují. Přání se nemusí splnit kvůli konfliktu s jiným
+                    pravidlem nebo nedostatku partnerů. Ruční úpravy jsou
+                    součástí návrhu; členové je vidí až po zveřejnění.
                   </p>
                 </>
               )}
@@ -224,17 +253,28 @@ function PairingEditor({
                 </div>
               </>
             )}
+            <p>
+              {event.status === "closed"
+                ? "Páruje se podle zapsané skutečné účasti této akce, včetně bývalých členů."
+                : "Páruje se z vybraných účastníků; nepřítomní a omluvení jsou vyřazení."}
+            </p>
+            <p>
+              Dostupní pro páry: {eligible.length} (
+              {eligible.filter((m) => m.role === "leader").length} mužů,{" "}
+              {eligible.filter((m) => m.role === "follower").length} žen).
+            </p>
+            {generate.error && (
+              <p role="alert" className="form-error">
+                {generate.error.message}
+              </p>
+            )}
+            {message && <p role="status">{message}</p>}
             <Button
+              loading={generate.isPending}
+              disabled={selection.isPending || save.isPending}
               onClick={() => {
-                const result = generateSeasonPairs(
-                  db,
-                  event,
-                  tuning,
-                  crypto.randomUUID(),
-                );
-                setDraft(result.pairs);
-                setWarnings(result.warnings);
                 setMessage("");
+                generate.mutate();
               }}
             >
               Vygenerovat návrh
@@ -266,7 +306,7 @@ function PairingEditor({
                             change(index, { leaderId: e.target.value })
                           }
                         >
-                          {selected
+                          {eligible
                             .filter((m) => m.role === "leader")
                             .map((m) => (
                               <option key={m.id} value={m.id}>
@@ -281,7 +321,7 @@ function PairingEditor({
                             change(index, { followerId: e.target.value })
                           }
                         >
-                          {selected
+                          {eligible
                             .filter((m) => m.role === "follower")
                             .map((m) => (
                               <option key={m.id} value={m.id}>
@@ -313,6 +353,9 @@ function PairingEditor({
                             />{" "}
                             Pod čarou
                           </label>
+                        )}
+                        {pair.reason && (
+                          <small className="pair-reason">{pair.reason}</small>
                         )}
                         <Button
                           variant="ghost"
@@ -347,10 +390,10 @@ function PairingEditor({
           <Button
             variant="secondary"
             onClick={() => {
-              const a = selected.find(
+              const a = eligible.find(
                 (m) => m.role === "leader" && !used.has(m.id),
               );
-              const b = selected.find(
+              const b = eligible.find(
                 (m) =>
                   m.role === "follower" &&
                   !used.has(m.id) &&
@@ -401,7 +444,12 @@ function PairingEditor({
             <div className="feature-toolbar">
               {event.type === "performance" && (
                 <Button
-                  disabled={!!error || pairs.length === 0}
+                  disabled={
+                    !!error ||
+                    pairs.length === 0 ||
+                    generate.isPending ||
+                    selection.isPending
+                  }
                   loading={save.isPending}
                   variant="secondary"
                   onClick={() => save.mutate(false)}
@@ -410,7 +458,12 @@ function PairingEditor({
                 </Button>
               )}
               <Button
-                disabled={!!error || pairs.length === 0}
+                disabled={
+                  !!error ||
+                  pairs.length === 0 ||
+                  generate.isPending ||
+                  selection.isPending
+                }
                 loading={save.isPending}
                 onClick={() => save.mutate(true)}
               >
@@ -426,7 +479,6 @@ function PairingEditor({
             {save.error?.message ?? selection.error?.message}
           </p>
         )}
-        {message && <p role="status">{message}</p>}
         <AppLink to={`/udalosti/${event.id}`}>
           Detail akce a uložené sady
         </AppLink>

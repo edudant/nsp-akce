@@ -3,6 +3,7 @@ import {
   generateSeasonPairs,
   defaultTuning,
   validatePairs,
+  pairingParticipants,
 } from "./seasonPairing";
 import { sortedRoster, memberGroups, compatibleMembers } from "./ensembleRules";
 import { getAttendancePoints } from "./domain";
@@ -257,6 +258,239 @@ describe("season pairing", () => {
     expect(
       generateSeasonPairs(db, performance, defaultTuning, "same").pairs,
     ).toEqual(baseline.pairs);
+  });
+  it("solves groups jointly so all compatible additional members get a pair", () => {
+    const ms = [
+      member("0", "leader", ["old", "young"]),
+      member("1", "leader", ["young"]),
+      member("2", "leader"),
+      member("3", "follower", ["young"]),
+      member("4", "follower"),
+      member("5", "follower"),
+    ];
+    const e = event(ms, { oldPairs: 1, youngPairs: 1 });
+    const db = database(ms, e);
+    for (let seed = 0; seed < 12; seed++) {
+      const r = generateSeasonPairs(db, e, defaultTuning, String(seed));
+      expect(r.pairs).toHaveLength(3);
+      expect(r.standingIds).toEqual([]);
+      expect(
+        r.pairs.filter((p) => !p.belowLine && p.ageGroup === "old"),
+      ).toHaveLength(1);
+      expect(
+        r.pairs.filter((p) => !p.belowLine && p.ageGroup === "young"),
+      ).toHaveLength(1);
+      expect(validatePairs(db, e, r.pairs)).toBeNull();
+    }
+  });
+  it("matches an independent exhaustive oracle for group quotas and forbidden edges", () => {
+    const groups: AgeGroup[][] = [["old"], ["young"], ["old", "young"]];
+    for (let mask = 0; mask < 81; mask++) {
+      let value = mask;
+      const ms = Array.from({ length: 4 }, (_, i) => {
+        const group = groups[value % 3];
+        value = Math.floor(value / 3);
+        return member(String(i), i < 2 ? "leader" : "follower", group);
+      });
+      const e = event(ms, { oldPairs: 1, youngPairs: 1 }),
+        db = database(ms, e);
+      if (mask % 2 === 0)
+        db.preferences = [
+          { id: "f", memberAId: "0", memberBId: "2", kind: "forbidden" },
+        ];
+      let best = [0, 0];
+      const visit = (i: number, used: Set<string>, assignments: AgeGroup[]) => {
+        if (i === 2) {
+          const main =
+            Number(assignments.includes("old")) +
+            Number(assignments.includes("young"));
+          if (
+            main > best[0] ||
+            (main === best[0] && assignments.length > best[1])
+          )
+            best = [main, assignments.length];
+          return;
+        }
+        visit(i + 1, used, assignments);
+        for (const b of ms.slice(2))
+          if (
+            !used.has(b.id) &&
+            !db.preferences.some(
+              (p) => p.memberAId === String(i) && p.memberBId === b.id,
+            )
+          )
+            for (const g of memberGroups(ms[i]).filter((g) =>
+              memberGroups(b).includes(g),
+            ))
+              visit(i + 1, new Set([...used, b.id]), [...assignments, g]);
+      };
+      visit(0, new Set(), []);
+      const result = generateSeasonPairs(db, e, defaultTuning, String(mask));
+      expect(
+        [result.pairs.filter((p) => !p.belowLine).length, result.pairs.length],
+        `group mask ${mask}`,
+      ).toEqual(best);
+      expect(validatePairs(db, e, result.pairs)).toBeNull();
+    }
+  });
+  it("reassigns an already matchable old dual member to fill young rehearsal pairs", () => {
+    const ms = [
+      member("a", "leader", ["old", "young"]),
+      member("d", "leader"),
+      member("b", "follower"),
+      member("c", "follower", ["young"]),
+    ];
+    const e = event(ms, { type: "rehearsal" });
+    const db = database(ms, e);
+    for (let seed = 0; seed < 12; seed++)
+      expect(
+        generateSeasonPairs(db, e, defaultTuning, String(seed)).pairs,
+      ).toHaveLength(2);
+    expect(
+      generateSeasonPairs(
+        db,
+        e,
+        { ...defaultTuning, supplementYoung: false },
+        "4",
+      ).pairs,
+    ).toHaveLength(1);
+  });
+  it("excludes absent/excused members even when selected and rejects manual pairs using them", () => {
+    const ms = [member("a", "leader"), member("b", "follower")];
+    const e = event(ms),
+      db = database(ms, e);
+    const pair = {
+      id: "p",
+      leaderId: "a",
+      followerId: "b",
+      round: 1,
+      ageGroup: "old" as const,
+    };
+    for (const status of ["absent", "excused"] as const) {
+      e.attendance[0].status = status;
+      expect(generateSeasonPairs(db, e, defaultTuning, "s").pairs).toEqual([]);
+      expect(validatePairs(db, e, [pair])).toContain("přítomných");
+    }
+  });
+  it("uses recorded reality for closed legacy events even without selection and for former members", () => {
+    const ms = [member("a", "leader"), member("b", "follower")];
+    ms[0].active = false;
+    const e = event(ms, { status: "closed", date: "2024-01-01" });
+    e.attendance.forEach((r) => (r.selected = false));
+    const db = database(ms, e),
+      r = generateSeasonPairs(db, e, defaultTuning, "s");
+    expect(pairingParticipants(db, e)).toHaveLength(2);
+    expect(r.pairs).toHaveLength(1);
+    expect(validatePairs(db, e, r.pairs)).toBeNull();
+    e.attendance[1].status = "unknown";
+    expect(generateSeasonPairs(db, e, defaultTuning, "s").pairs).toEqual([]);
+  });
+  it("reports why generation has no participants or no compatible pair", () => {
+    const e = event([]),
+      db = database([], e);
+    expect(
+      generateSeasonPairs(db, e, defaultTuning, "s").warnings.join(),
+    ).toContain("Nejsou vybraní");
+    e.status = "closed";
+    expect(
+      generateSeasonPairs(db, e, defaultTuning, "s").warnings.join(),
+    ).toContain("skutečná přítomnost");
+    const ms = [member("a", "leader"), member("b", "leader")];
+    const e2 = event(ms);
+    expect(
+      generateSeasonPairs(
+        database(ms, e2),
+        e2,
+        defaultTuning,
+        "s",
+      ).warnings.join(),
+    ).toContain("nelze vytvořit pár");
+  });
+  it("does not invent byes for attendance without confirmed actual standing", () => {
+    const ms = [
+      member("a", "leader"),
+      member("b", "leader"),
+      member("c", "follower"),
+    ];
+    const e = event(ms),
+      db = database(ms, e);
+    const baseline = generateSeasonPairs(db, e, defaultTuning, "1");
+    db.events.push(
+      event(ms, {
+        id: "past",
+        status: "closed",
+        date: "2026-09-01",
+        actualPairs: [],
+        attendance: [
+          {
+            memberId: "a",
+            status: "present",
+            interest: "yes",
+            selected: true,
+            actualStanding: false,
+          },
+        ],
+      }),
+    );
+    expect(generateSeasonPairs(db, e, defaultTuning, "1").pairs).toEqual(
+      baseline.pairs,
+    );
+  });
+  it("protects recent confirmed standing when historical bye counts are equal", () => {
+    const ms = [
+      member("a", "leader"),
+      member("b", "leader"),
+      member("c", "follower"),
+    ];
+    const e = event(ms),
+      db = database(ms, e);
+    for (const [id, date] of [
+      ["a", "2026-09-01"],
+      ["b", "2026-09-27"],
+    ])
+      db.events.push(
+        event(ms, {
+          id: `past-${id}`,
+          status: "closed",
+          date,
+          attendance: [
+            {
+              memberId: id,
+              status: "present",
+              interest: "yes",
+              selected: true,
+              actualStanding: true,
+            },
+          ],
+        }),
+      );
+    for (let seed = 0; seed < 12; seed++)
+      expect(
+        generateSeasonPairs(
+          db,
+          e,
+          { ...defaultTuning, rotation: 3, preferences: 0, experience: 0 },
+          String(seed),
+        ).pairs[0].leaderId,
+      ).toBe("b");
+  });
+  it("ignores history and own points from the regenerated closed event", () => {
+    const ms = [
+      member("a", "leader"),
+      member("b", "leader"),
+      member("c", "follower"),
+    ];
+    const e = event(ms, { status: "closed" }),
+      db = database(ms, e);
+    const baseline = generateSeasonPairs(db, e, defaultTuning, "s");
+    e.actualPairs = baseline.pairs.map((p) => ({ ...p, actual: true }));
+    e.attendance.forEach((r) => {
+      r.actualStanding = true;
+      r.earnedPoints = 1000;
+    });
+    expect(generateSeasonPairs(db, e, defaultTuning, "s").pairs).toEqual(
+      baseline.pairs,
+    );
   });
   it("rejects duplicate members, forbidden manual pairs and incompatible groups", () => {
     const ms = [member("a", "leader"), member("b", "follower")];

@@ -169,3 +169,19 @@ Browser test zahrnuje mobilní psaní v editaci a hromadné přidání před gen
 Ověřeno: 95 UI/unit testů, 24 integration scénářů, 16 browser scénářů,
 produkční build a mobilní layout člena i správce na šířce 320 px.
 Bez nové databázové migrace.
+
+## Oprava generátoru a historických akcí (29. 9.)
+
+Detaily a reprodukce: [audit generátoru](AUDIT_GENERATORU_PARU_2026_09_29.md).
+Společná optimalizace skupin a sestavy nahrazuje postupné párování.
+Uzavřené akce používají zaznamenanou skutečnou účast i bez `selected`;
+přítomní bývalí členové zůstávají dostupní adminovi. Uložení ověřuje stejné
+podmínky na serveru. Historie stání je pouze potvrzená a zahrnuje poslední
+datum; aktuálně regenerovaná akce neovlivňuje vlastní historii ani body.
+
+Výpočet běží ve workeru s limitem, UI ukazuje výsledek/chybu i počty dostupných
+členů. Admin vidí vysvětlení párů, změna stání zachovává ostatní ruční úpravy.
+Migrace: `20260929160000_pairing_reality_and_history.sql`. Ověřeno 107 UI/unit
+testů, 26 integration a 17 browser scénářů. Oracle test pokrývá 81 konfigurací
+skupin a zákazů. Zátěžový příklad 50 členů vytvořil 25 párů bez upozornění
+(cca 200 ms vystoupení, 10 ms zkouška na lokálním stroji).

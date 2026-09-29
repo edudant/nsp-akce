@@ -864,6 +864,130 @@ try {
   pass(
     "Performance closure prefills reported attendance, preserves manual percentages and records source in audit",
   );
+  const legacyRehearsal = ok(
+    await rpc(admin, "event", {
+      ...input("rehearsal"),
+      title: `Legacy ${tag}`,
+    }),
+  ).id;
+  eventIds.push(legacyRehearsal);
+  for (const index of [3, 4])
+    ok(
+      await rpc(admin, "attendance", {
+        id: legacyRehearsal,
+        memberId: members[index].id,
+        status: "present",
+        selected: true,
+      }),
+    );
+  ok(await rpc(admin, "event", { id: legacyRehearsal, status: "closed" }));
+  ok(
+    await root
+      .from("event_participants")
+      .update({ status: "invited" })
+      .eq("event_id", legacyRehearsal),
+  );
+  ok(
+    await root
+      .from("members")
+      .update({ is_active: false })
+      .eq("id", members[3].id),
+  );
+  let legacyDb = await db(admin);
+  assert.ok(
+    legacyDb.events
+      .find((e) => e.id === legacyRehearsal)
+      .attendance.some(
+        (r) =>
+          r.memberId === members[3].id && r.status === "present" && !r.selected,
+      ),
+  );
+  ok(
+    await admin.rpc("save_pairs_v3", {
+      event_id: legacyRehearsal,
+      pairs: [
+        {
+          leaderId: members[3].id,
+          followerId: members[4].id,
+          ageGroup: "young",
+          reason: "PRIVATE GENERATOR EXPERIENCE",
+        },
+      ],
+      published: true,
+    }),
+  );
+  legacyDb = await db(admin);
+  assert.equal(
+    legacyDb.events.find((e) => e.id === legacyRehearsal).pairs[0].reason,
+    "PRIVATE GENERATOR EXPERIENCE",
+  );
+  assert.equal(
+    (await db(member)).events.find((e) => e.id === legacyRehearsal).pairs[0]
+      .reason,
+    null,
+  );
+  assert.equal(
+    ok(await admin.rpc("member_preview_v3")).events.find(
+      (e) => e.id === legacyRehearsal,
+    ).pairs[0].reason,
+    null,
+  );
+  pass(
+    "Closed legacy action pairs recorded attendees without selection, retains former members, keeps generator explanations admin-only",
+  );
+  ok(
+    await root
+      .from("members")
+      .update({ is_active: true })
+      .eq("id", members[3].id),
+  );
+  ok(
+    await rpc(admin, "attendance", {
+      id: legacyRehearsal,
+      memberId: members[3].id,
+      status: "absent",
+      selected: true,
+    }),
+  );
+  const beforeRejected = ok(
+    await root
+      .from("pairing_runs")
+      .select("id")
+      .eq("event_id", legacyRehearsal),
+  ).length;
+  fail(
+    await admin.rpc("save_pairs_v3", {
+      event_id: legacyRehearsal,
+      pairs: [
+        {
+          leaderId: members[3].id,
+          followerId: members[4].id,
+          ageGroup: "young",
+        },
+      ],
+      published: true,
+    }),
+  );
+  assert.equal(
+    ok(
+      await root
+        .from("pairing_runs")
+        .select("id")
+        .eq("event_id", legacyRehearsal),
+    ).length,
+    beforeRejected,
+  );
+  ok(
+    await rpc(admin, "attendance", {
+      id: legacyRehearsal,
+      memberId: members[3].id,
+      status: "present",
+      selected: false,
+    }),
+  );
+  pass(
+    "Server rejects absent selected participants atomically without creating a pairing run",
+  );
   const automatic = ok(
     await rpc(admin, "event", {
       ...input("performance"),
@@ -898,6 +1022,7 @@ try {
         dance,
         carols,
         sharedCode,
+        legacyRehearsal,
       }),
     );
     console.log(

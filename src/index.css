@@ -7006,3 +7006,5 @@ tbody tr:hover {
 @media (max-width: 600px) { .events-toolbar .season-filter { flex-basis: auto; margin-top: 0; } }
 
 .event-status-info { display: inline-flex; align-items: center; gap: 4px; }
+
+.pair-reason { flex-basis: 100%; color: var(--text-muted, #526579); line-height: 1.5; }

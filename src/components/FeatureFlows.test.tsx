@@ -14,12 +14,15 @@ import { SongSeriesPanel } from "./SongSeriesPanel";
 import { useState } from "react";
 import { Dialog } from "./Ui";
 import { EventDetailPage } from "../pages/EventDetailPage";
+import { PairingPage } from "../pages/PairingPage";
 import { EventsPage } from "../pages/EventsPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { EventForm } from "./EventForm";
 import type { AppDatabase, EnsembleEvent, Member } from "../lib/domain";
 const api = vi.hoisted(() => ({
   updateAttendance: vi.fn(),
+  savePairs: vi.fn(),
+  generatePairs: vi.fn(),
   updateMyResponse: vi.fn(),
   saveSongSeries: vi.fn(),
   deleteSongSeries: vi.fn(),
@@ -27,6 +30,9 @@ const api = vi.hoisted(() => ({
   getEventAudit: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("../lib/dataApi", () => ({ appApi: api }));
+vi.mock("../lib/pairingClient", () => ({
+  generatePairsAsync: api.generatePairs,
+}));
 const data = vi.hoisted(() => ({ current: null as AppDatabase | null }));
 vi.mock("./DataContext", () => ({
   databaseQueryKey: ["database"],
@@ -130,6 +136,83 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("feature UI flows", () => {
+  it("shows an explicit empty generation result and the corrective action", async () => {
+    setup(fixture({ status: "closed" }));
+    api.generatePairs.mockResolvedValue({
+      pairs: [],
+      standingIds: [],
+      warnings: [
+        "Není zapsaná skutečná přítomnost. V Účastnících nastavte přítomen nebo částečnou účast.",
+      ],
+    });
+    wrap(<PairingPage canEdit />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Vygenerovat návrh" }),
+    );
+    expect(await screen.findByText(/Návrh vytvořen: 0 hlavních/)).toBeVisible();
+    expect(screen.getByText(/Není zapsaná skutečná přítomnost/)).toBeVisible();
+  });
+  it("reports worker errors instead of silently doing nothing", async () => {
+    setup();
+    api.generatePairs.mockRejectedValue(
+      new Error("Generátor se nepodařilo spustit."),
+    );
+    wrap(<PairingPage canEdit />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Vygenerovat návrh" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Generátor se nepodařilo spustit.",
+    );
+  });
+  it("preserves manual changes when another member is explicitly assigned to stand", async () => {
+    const e = fixture({
+      attendance: members.map((m) => ({
+        memberId: m.id,
+        status: "present",
+        interest: "yes",
+        selected: true,
+      })),
+    });
+    const db = setup(e);
+    db.members = [
+      ...members,
+      { ...members[0], id: "c", fullName: "Další muž" },
+    ];
+    e.attendance.push({
+      memberId: "c",
+      status: "present",
+      interest: "yes",
+      selected: true,
+    });
+    api.generatePairs.mockResolvedValue({
+      pairs: [
+        {
+          id: "pair",
+          leaderId: "a",
+          followerId: "b",
+          round: 1,
+          ageGroup: "old",
+          belowLine: false,
+        },
+      ],
+      standingIds: ["c"],
+      warnings: [],
+    });
+    wrap(<PairingPage canEdit />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Vygenerovat návrh" }));
+    await screen.findByLabelText("Muž v páru 1");
+    await user.click(screen.getByRole("checkbox", { name: "Pod čarou" }));
+    await user.click(
+      screen.getByRole("checkbox", { name: "Další muž" }),
+    );
+    expect(
+      await screen.findByText(/Ostatní ruční úpravy zůstaly/),
+    ).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: "Pod čarou" })).toBeChecked();
+    expect(screen.getByLabelText("Muž v páru 1")).toHaveValue("a");
+  });
   it("provides expandable native help", async () => {
     const user = userEvent.setup();
     render(

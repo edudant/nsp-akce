@@ -1,15 +1,10 @@
+import { solve, type Constraint } from "yalps";
 import {
-  generatePairings,
+  scorePairingCandidates,
   DEFAULT_PAIRING_WEIGHTS,
   type PairingWeights,
 } from "./pairing";
-import type {
-  AppDatabase,
-  EnsembleEvent,
-  Member,
-  DancePair,
-  AgeGroup,
-} from "./domain";
+import type { AppDatabase, EnsembleEvent, Member, DancePair } from "./domain";
 import { compatibleMembers, memberGroups } from "./ensembleRules";
 export interface PairingTuning {
   preferences: number;
@@ -27,6 +22,25 @@ export const defaultTuning: PairingTuning = {
   chooser: "both",
   supplementYoung: true,
 };
+/** Closed actions use recorded reality, including former members. */
+export function pairingParticipants(
+  db: AppDatabase,
+  event: EnsembleEvent,
+): Member[] {
+  return db.members.filter((m) =>
+    event.attendance.some(
+      (r) =>
+        r.memberId === m.id &&
+        (event.status === "closed"
+          ? r.status === "present" || r.status === "partial"
+          : m.active &&
+            r.selected &&
+            r.status !== "absent" &&
+            r.status !== "excused"),
+    ),
+  );
+}
+
 export function validatePairs(
   db: AppDatabase,
   event: EnsembleEvent,
@@ -65,9 +79,8 @@ export function validatePairs(
     if (
       [a.id, b.id].some(
         (id) =>
-          !event.attendance.some(
-            (r) => r.memberId === id && r.selected && !r.standing,
-          ),
+          !pairingParticipants(db, event).some((m) => m.id === id) ||
+          event.attendance.find((r) => r.memberId === id)?.standing,
       )
     )
       return "Páry tvořte pouze z vybraných přítomných členů.";
@@ -87,12 +100,9 @@ export function generateSeasonPairs(
       warnings: ["Koledy nemají párování."],
     };
   const rehearsal = event.type === "rehearsal";
-  const available = db.members.filter(
-    (m) =>
-      m.active &&
-      event.attendance.some(
-        (r) => r.memberId === m.id && r.selected && !r.standing,
-      ),
+  const roster = pairingParticipants(db, event);
+  const available = roster.filter(
+    (m) => !event.attendance.find((r) => r.memberId === m.id)?.standing,
   );
   const past = db.events.filter(
     (e) =>
@@ -114,6 +124,7 @@ export function generateSeasonPairs(
       db.events
         .filter(
           (e) =>
+            e.id !== event.id &&
             e.status === "closed" &&
             e.seasonId === event.seasonId &&
             e.date <= event.date,
@@ -130,240 +141,221 @@ export function generateSeasonPairs(
   const allZero = Object.fromEntries(
     Object.keys(DEFAULT_PAIRING_WEIGHTS).map((key) => [key, 0]),
   ) as unknown as PairingWeights;
-  function match(members: Member[], group?: AgeGroup, variant = 0) {
-    const forbidden = applicablePreferences
-      .filter((p) => p.kind === "forbidden")
-      .map((p) => ({
-        memberAId: p.memberAId,
-        memberBId: p.memberBId,
-        kind: p.kind,
-      }));
-    for (const a of members)
-      for (const b of members)
-        if (
-          a.role === "leader" &&
-          b.role === "follower" &&
-          (!compatibleMembers(a, b) ||
-            (group &&
-              (!memberGroups(a).includes(group) ||
-                !memberGroups(b).includes(group))))
-        )
-          forbidden.push({
-            memberAId: a.id,
-            memberBId: b.id,
-            kind: "forbidden",
-          });
-    const weights: Partial<PairingWeights> = rehearsal
-      ? { ...allZero, tieBreaker: 1 }
-      : {
-          repeat: 24 * tuning.rotation,
-          recency: 30 * tuning.rotation,
-          beginnerBeginner: 36 * tuning.experience,
-          beginnerExperiencedBonus: 18 * tuning.experience,
-          partnerWishBonus: 24 * tuning.preferences * (1 + tuning.points),
-          mutualPartnerWishBonus: 48 * tuning.preferences * (1 + tuning.points),
-          preferredBonus: 8 * tuning.preferences,
-          discouraged: 100 * tuning.preferences,
-          historicalByeFairness: 40 * tuning.rotation,
-          consecutiveByeAvoidance: 80 * tuning.rotation,
-        };
-    const result = generatePairings({
-      members: members.map((m) => ({
+  const weights: Partial<PairingWeights> = rehearsal
+    ? { ...allZero, tieBreaker: 1 }
+    : {
+        repeat: 24 * tuning.rotation,
+        recency: 30 * tuning.rotation,
+        beginnerBeginner: 36 * tuning.experience,
+        beginnerExperiencedBonus: 18 * tuning.experience,
+        partnerWishBonus: 24 * tuning.preferences * (1 + tuning.points),
+        mutualPartnerWishBonus: 48 * tuning.preferences * (1 + tuning.points),
+        preferredBonus: 8 * tuning.preferences,
+        discouraged: 100 * tuning.preferences,
+        historicalByeFairness: 40 * tuning.rotation,
+        consecutiveByeAvoidance: 80 * tuning.rotation,
+      };
+  const candidates = scorePairingCandidates({
+    members: available.map((m) => {
+      const byes = past.filter((e) =>
+        e.attendance.some(
+          (r) =>
+            r.memberId === m.id &&
+            (r.status === "present" || r.status === "partial") &&
+            r.actualStanding === true,
+        ),
+      );
+      return {
         id: m.id,
         role: m.role,
         experienceLevel: m.experience,
-        byeCount: past.filter(
-          (e) =>
-            e.attendance.some(
-              (r) =>
-                r.memberId === m.id &&
-                (r.status === "present" || r.status === "partial"),
-            ) &&
-            !(e.actualPairs ?? e.pairs).some(
-              (p) => p.actual && (p.leaderId === m.id || p.followerId === m.id),
-            ),
-        ).length,
-      })),
-      compatibleRolePairs: [["leader", "follower"]],
-      preferences: [
-        ...forbidden,
-        ...(rehearsal
-          ? []
-          : db.preferences
-              .filter((p) => p.kind !== "forbidden")
-              .map((p) => ({
-                ...p,
-                strength: Math.min(1, (p.strength ?? 3) / 5),
-              }))),
-      ],
-      partnerWishes: rehearsal
+        byeCount: byes.length,
+        lastByeAt: byes
+          .map((e) => e.date)
+          .sort()
+          .at(-1),
+      };
+    }),
+    compatibleRolePairs: [["leader", "follower"]],
+    preferences: [
+      ...applicablePreferences.filter((p) => p.kind === "forbidden"),
+      ...(rehearsal
         ? []
-        : (db.partnerWishes ?? [])
-            .filter(
-              (w) =>
-                w.eventId === event.id &&
-                (tuning.chooser === "both" ||
-                  db.members.find((m) => m.id === w.memberId)?.role ===
-                    tuning.chooser),
-            )
-            .map((w) => ({
-              ...w,
-              strength:
-                (1 +
-                  (tuning.points * (pointValues.get(w.memberId) ?? 0)) /
-                    maximumPoints) /
-                (1 + tuning.points),
+        : db.preferences
+            .filter((p) => p.kind !== "forbidden")
+            .map((p) => ({
+              ...p,
+              strength: Math.min(1, (p.strength ?? 3) / 5),
+            }))),
+    ],
+    partnerWishes: rehearsal
+      ? []
+      : (db.partnerWishes ?? [])
+          .filter(
+            (w) =>
+              w.eventId === event.id &&
+              (tuning.chooser === "both" ||
+                db.members.find((m) => m.id === w.memberId)?.role ===
+                  tuning.chooser),
+          )
+          .map((w) => ({
+            ...w,
+            strength:
+              (1 +
+                (tuning.points * (pointValues.get(w.memberId) ?? 0)) /
+                  maximumPoints) /
+              (1 + tuning.points),
+          })),
+    history: rehearsal
+      ? []
+      : past.flatMap((e) =>
+          (e.actualPairs ?? e.pairs)
+            .filter((p) => p.actual)
+            .map((p) => ({
+              memberAId: p.leaderId,
+              memberBId: p.followerId,
+              occurredAt: e.date,
+              actual: true,
             })),
-      history: rehearsal
-        ? []
-        : past.flatMap((e) =>
-            (e.actualPairs ?? e.pairs)
-              .filter((p) => p.actual)
-              .map((p) => ({
-                memberAId: p.leaderId,
-                memberBId: p.followerId,
-                occurredAt: e.date,
-                actual: true,
-              })),
-          ),
-      rounds: 1,
-      seed,
-      variant,
-      asOf: event.date,
-      weights,
-    });
-    return result.rounds[0].pairs
-      .map((p) => ({
-        leaderId: p.memberAId,
-        followerId: p.memberBId,
-        score: p.score,
-      }))
-      .sort((a, b) => a.score - b.score);
-  }
-  const candidates: Array<{ pairs: DancePair[]; cost: number }> = [];
-  for (const order of [
-    ["young", "old"],
-    ["old", "young"],
-  ] as AgeGroup[][]) {
-    let remaining = [...available];
-    const pairs: DancePair[] = [];
-    let cost = 0;
-    const targets = {
-      old: rehearsal ? Number.MAX_SAFE_INTEGER : (event.oldPairs ?? 0),
-      young: rehearsal ? Number.MAX_SAFE_INTEGER : (event.youngPairs ?? 0),
-    };
-    for (const group of order) {
-      const members = remaining.filter(
-        (m) =>
-          memberGroups(m).includes(group) &&
-          (!rehearsal || m.ageGroup === group),
-      );
-      const matched = match(members, group).slice(0, targets[group]);
-      for (const p of matched) {
-        pairs.push({
-          id: `${seed}-${pairs.length}`,
-          leaderId: p.leaderId,
-          followerId: p.followerId,
+        ),
+    rounds: 1,
+    seed,
+    asOf: event.date,
+    weights,
+  });
+  const membersById = new Map(available.map((m) => [m.id, m]));
+  const constraints: Record<string, Constraint> = Object.fromEntries(
+    available.map((m) => [`member:${m.id}`, { max: 1 }]),
+  );
+  const variables: Record<string, Record<string, number>> = {};
+  const choices = new Map<string, DancePair>();
+  const targets = {
+    old: Math.max(0, event.oldPairs ?? event.capacityPairs ?? 0),
+    young: Math.max(0, event.youngPairs ?? 0),
+  };
+  if (!rehearsal)
+    for (const group of ["old", "young"] as const)
+      constraints[`main:${group}`] = { max: targets[group] };
+  for (const candidate of candidates) {
+    const a = membersById.get(candidate.memberAId)!,
+      b = membersById.get(candidate.memberBId)!;
+    for (const group of memberGroups(a).filter((g) =>
+      memberGroups(b).includes(g),
+    )) {
+      if (
+        rehearsal &&
+        !tuning.supplementYoung &&
+        group === "young" &&
+        (a.ageGroup !== "young" || b.ageGroup !== "young")
+      )
+        continue;
+      // Secondary groups are allowed when needed, with priority as a soft rule.
+      const primaryPenalty =
+        Number(a.ageGroup !== group) + Number(b.ageGroup !== group);
+      for (const belowLine of rehearsal ? [false] : [false, true]) {
+        if (!rehearsal && !belowLine && targets[group] === 0) continue;
+        const key = `pair:${choices.size}`;
+        choices.set(key, {
+          id: `${seed}-${choices.size}`,
+          leaderId: a.id,
+          followerId: b.id,
           round: 1,
           ageGroup: group,
-          belowLine: false,
+          belowLine,
+          reason: rehearsal
+            ? "Náhodný pár; zařazení a zákazy jsou respektované."
+            : candidate.explanation,
         });
-        cost += p.score;
+        variables[key] = {
+          [`member:${a.id}`]: 1,
+          [`member:${b.id}`]: 1,
+          total: 1,
+          main: belowLine ? 0 : 1,
+          cost: candidate.score + primaryPenalty * (rehearsal ? 0.01 : 2),
+          ...(!rehearsal && !belowLine ? { [`main:${group}`]: 1 } : {}),
+        };
       }
-      const used = new Set(matched.flatMap((p) => [p.leaderId, p.followerId]));
-      remaining = remaining.filter((m) => !used.has(m.id));
     }
-    if (rehearsal)
-      for (const group of order) {
-        const members = remaining.filter(
-          (m) =>
-            memberGroups(m).includes(group) &&
-            (group !== "young" ||
-              tuning.supplementYoung ||
-              m.ageGroup === "young"),
-        );
-        const matched = match(members, group, 1);
-        for (const p of matched) {
-          pairs.push({
-            id: `${seed}-${pairs.length}`,
-            leaderId: p.leaderId,
-            followerId: p.followerId,
-            round: 1,
-            ageGroup: group,
-            belowLine: false,
-          });
-          cost += p.score;
-        }
-        const used = new Set(
-          matched.flatMap((p) => [p.leaderId, p.followerId]),
-        );
-        remaining = remaining.filter((m) => !used.has(m.id));
-      }
-    if (!rehearsal)
-      for (const p of match(remaining)) {
-        const a = available.find((m) => m.id === p.leaderId)!,
-          b = available.find((m) => m.id === p.followerId)!;
-        const common = memberGroups(a).filter((g) =>
-          memberGroups(b).includes(g),
-        );
-        const group = common.includes(a.ageGroup!) ? a.ageGroup! : common[0];
-        pairs.push({
-          id: `${seed}-${pairs.length}`,
-          leaderId: p.leaderId,
-          followerId: p.followerId,
-          round: 1,
-          ageGroup: group,
-          belowLine: true,
-        });
-        cost += p.score;
-      }
-    const deficit = rehearsal
-      ? 0
-      : Math.max(
-          0,
-          targets.old -
-            pairs.filter((p) => p.ageGroup === "old" && !p.belowLine).length,
-        ) +
-        Math.max(
-          0,
-          targets.young -
-            pairs.filter((p) => p.ageGroup === "young" && !p.belowLine).length,
-        );
-    const primaryPenalty = pairs.reduce(
-      (sum, p) =>
-        sum +
-        [p.leaderId, p.followerId].filter(
-          (id) => available.find((m) => m.id === id)?.ageGroup !== p.ageGroup,
-        ).length,
-      0,
-    );
-    candidates.push({
-      pairs,
-      cost:
-        deficit * 1e8 -
-        pairs.length * 1e6 +
-        primaryPenalty * (rehearsal ? 0.01 : 2) +
-        cost,
-    });
   }
-  const pairs = candidates.sort((a, b) => a.cost - b.cost)[0].pairs;
-  const used = new Set(pairs.flatMap((p) => [p.leaderId, p.followerId]));
-  const standingIds = event.attendance
-    .filter((r) => r.selected && (r.standing || !used.has(r.memberId)))
-    .map((r) => r.memberId);
   const warnings: string[] = [];
+  let pairs: DancePair[] = [];
+  if (choices.size) {
+    // Lexicographic objectives: targets, maximum pairing, then tuning. All groups
+    // and below-line assignments share the same member-capacity constraints.
+    for (const objective of rehearsal
+      ? ["total", "cost"]
+      : ["main", "total", "cost"]) {
+      const result = solve(
+        {
+          direction: objective === "cost" ? "minimize" : "maximize",
+          objective,
+          constraints,
+          variables,
+          binaries: true,
+        },
+        { timeout: 4000, maxIterations: 100000 },
+      );
+      if (
+        !Number.isFinite(result.result) ||
+        !["optimal", "timedout"].includes(result.status)
+      )
+        throw new Error(
+          "Sestavu se nepodařilo vypočítat. Zkontrolujte účast a zkuste generování znovu.",
+        );
+      pairs = result.variables
+        .filter(([, value]) => value > 0.5)
+        .map(([key]) => choices.get(key)!);
+      if (result.status === "timedout") {
+        warnings.push(
+          "Výpočet dosáhl časového limitu. Návrh respektuje omezení, ale nemusí být nejlepší; zkuste další variantu.",
+        );
+        break;
+      }
+      if (objective !== "cost")
+        constraints[objective] = { equal: Math.round(result.result) };
+    }
+  }
+  pairs.sort(
+    (a, b) =>
+      Number(a.belowLine) - Number(b.belowLine) ||
+      (a.ageGroup ?? "").localeCompare(b.ageGroup ?? "") ||
+      a.leaderId.localeCompare(b.leaderId),
+  );
+  const invalid = validatePairs(db, event, pairs);
+  if (invalid) throw new Error(invalid);
+  const used = new Set(pairs.flatMap((p) => [p.leaderId, p.followerId]));
+  const standingIds = roster.filter((m) => !used.has(m.id)).map((m) => m.id);
+  if (available.length === 0)
+    warnings.push(
+      event.status === "closed"
+        ? "Není zapsaná skutečná přítomnost. V Účastnících nastavte přítomen nebo částečnou účast."
+        : "Nejsou vybraní přítomní účastníci. Přidejte je v seznamu Účastníci.",
+    );
+  else if (!pairs.length)
+    warnings.push(
+      "Z přítomných nelze vytvořit pár. Zkontrolujte muže/ženy, zařazení Starý/Mladý, zákazy a explicitní stání.",
+    );
   if (available.some((m) => memberGroups(m).length === 0))
     warnings.push(
       "Někteří přítomní nemají zařazení; doplňte je v evidenci členů.",
     );
   if (!rehearsal)
-    for (const group of ["old", "young"] as AgeGroup[])
+    for (const group of ["old", "young"] as const)
       if (
         pairs.filter((p) => p.ageGroup === group && !p.belowLine).length <
-        (group === "old" ? (event.oldPairs ?? 0) : (event.youngPairs ?? 0))
+        targets[group]
       )
         warnings.push(
-          `Pro skupinu ${group === "old" ? "Starý" : "Mladý"} není dost kompatibilních párů pro zadaný odhad.`,
+          `Pro skupinu ${group === "old" ? "Starý" : "Mladý"} nelze naplnit zadaný odhad při zachování kompatibility a zákazů.`,
         );
+  if (
+    pairs.length &&
+    standingIds.some(
+      (id) => !event.attendance.find((r) => r.memberId === id)?.standing,
+    )
+  )
+    warnings.push(
+      "Někteří přítomní zůstali bez páru kvůli počtu kompatibilních partnerů nebo zákazům. Jsou uvedeni v seznamu Bez páru.",
+    );
   return { pairs, standingIds, warnings };
 }

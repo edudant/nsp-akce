@@ -301,6 +301,7 @@ try {
     );
   await admin.getByLabel("Čí přání zohlednit").selectOption("follower");
   await admin.getByRole("button", { name: "Vygenerovat návrh" }).click();
+  await admin.getByLabel("Muž v páru 1").waitFor();
   assert.equal(await admin.getByLabel("Muž v páru 1").count(), 1);
   assert.equal(await admin.getByLabel("Muž v páru 2").count(), 1);
   await admin
@@ -510,6 +511,7 @@ try {
     true,
   );
   await admin.getByRole("button", { name: "Vygenerovat návrh" }).click();
+  await admin.getByLabel("Muž v páru 1").waitFor();
   await admin.getByRole("button", { name: "Uložit a zveřejnit sadu" }).click();
   await admin.getByText("Páry jsou zveřejněné.", { exact: true }).waitFor();
   await go(
@@ -693,6 +695,26 @@ try {
     animations: "disabled",
   });
   pass("Admin desktop and mobile visual checks");
+  if (fixture.legacyRehearsal) {
+    await go(admin, "/pary?event=" + fixture.legacyRehearsal, "Taneční páry");
+    await admin.getByText(/Páruje se podle zapsané skutečné účasti/).waitFor();
+    await admin.getByRole("button", { name: "Vygenerovat návrh" }).click();
+    await admin.getByText(/Návrh vytvořen: 1 hlavních párů/).waitFor();
+    await admin.getByLabel("Muž v páru 1").waitFor();
+    await admin
+      .getByRole("button", { name: "Uložit a zveřejnit sadu" })
+      .click();
+    await admin.getByText("Páry jsou zveřejněné.", { exact: true }).waitFor();
+    await admin.setViewportSize({ width: 390, height: 844 });
+    await noOverflow(admin);
+    await admin.screenshot({
+      path: screenshotDir + "/pairing-legacy-mobile.png",
+      fullPage: true,
+    });
+    pass(
+      "Worker generates and publishes a closed legacy action from actual attendance without selected participants",
+    );
+  }
   assert.deepEqual(errors, []);
   console.log(`Browser checks passed: ${checks}`);
 } finally {
