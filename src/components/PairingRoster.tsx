@@ -1,3 +1,4 @@
+import { isDancer } from "../lib/domain";
 import { useState } from "react";
 import type {
   AppDatabase,
@@ -32,7 +33,7 @@ export function PairingRoster({
   const [partnerId, setPartnerId] = useState("");
   const selected: Member[] = roster
     ? roster
-        .filter((entry) => entry.role !== "musician")
+        .filter((entry) => isDancer(entry.role ?? db.members.find(m=>m.id===entry.memberId)?.role ?? "leader"))
         .map((entry) => {
           const member = db.members.find((m) => m.id === entry.memberId);
           return {

@@ -518,11 +518,11 @@ describe("season pairing", () => {
       baseline.pairs,
     );
   });
-  it("excludes musicians from generation, standing and manual candidates", () => {
+  it.each(["musician", "photographer"] as const)("excludes %s from generation, standing and manual candidates", (role) => {
     const ms = [
       member("a", "leader"),
       member("b", "follower"),
-      member("music", "musician"),
+      member("music", role),
     ];
     for (const status of ["confirmed", "closed"] as const) {
       const e = event(ms, { status }),

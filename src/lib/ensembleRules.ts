@@ -1,3 +1,4 @@
+import { isDancer } from "./domain";
 import type { AppDatabase, EnsembleEvent, Member, AgeGroup } from "./domain";
 import { normalizeMemberSearch } from "./memberFilters";
 export function memberGroups(member: Member): AgeGroup[] {
@@ -5,8 +6,8 @@ export function memberGroups(member: Member): AgeGroup[] {
 }
 export function compatibleMembers(a: Member, b: Member): boolean {
   return (
-    a.role !== "musician" &&
-    b.role !== "musician" &&
+    isDancer(a.role) &&
+    isDancer(b.role) &&
     a.id !== b.id &&
     a.role !== b.role &&
     memberGroups(a).some((group) => memberGroups(b).includes(group))

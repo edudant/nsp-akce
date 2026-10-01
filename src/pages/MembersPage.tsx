@@ -275,6 +275,7 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
               <option value="leader">Tanečníci</option>
               <option value="follower">Tanečnice</option>
               <option value="musician">Muzikanti</option>
+              <option value="photographer">Fotografové</option>
             </Select>
             <Select
               aria-label="Filtrovat zařazení"
@@ -614,7 +615,7 @@ function MemberForm({
         <Field
           htmlFor="member-role"
           label="Role"
-          hint="Muzikant hlásí účast, ale nevstupuje do párů."
+          hint="Muzikant a fotograf hlásí účast, ale nevstupují do párů."
         >
           <Select
             id="member-role"

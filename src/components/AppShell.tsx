@@ -17,6 +17,7 @@ import { type ReactNode, useState } from "react";
 import type { SessionUser } from "../lib/domain";
 import { BrandMark } from "./BrandMark";
 import { AppLink } from "./Router";
+import { ThemeSwitch } from "./ThemeSwitch";
 
 const navigation = [
   { path: "/", label: "Přehled", icon: Home },
@@ -135,6 +136,7 @@ export function AppShell({
         </nav>
 
         <div className="sidebar__bottom">
+          <ThemeSwitch />
           {onToggleMemberPreview && (
             <button
               className="sidebar__view-toggle"

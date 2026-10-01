@@ -14,7 +14,11 @@ const mocks = vi.hoisted(() => ({
   saveProgramText: vi.fn(),
   saveSongText: vi.fn(),
   navigate: vi.fn(),
+  favorites: [] as string[],
+  getSongFavorites: vi.fn(),
+  setSongFavorite: vi.fn(),
 }));
+vi.mock("../lib/supabase", () => ({ requireSupabase: () => ({ rpc: async (name: string, args?: {target_song_id: string; favorite: boolean}) => { if(name==="get_song_favorites_v8") return {data: await mocks.getSongFavorites(),error:null}; try { await mocks.setSongFavorite(args!.target_song_id,args!.favorite); return {error:null}; } catch(error) {return {error};} } }) }));
 vi.mock("../lib/programTexts", async (original) => ({
   ...(await original<typeof import("../lib/programTexts")>()),
   ...mocks,
@@ -57,6 +61,9 @@ function show(element: React.ReactNode) {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.favorites = [];
+  mocks.getSongFavorites.mockImplementation(async () => [...mocks.favorites]);
+  mocks.setSongFavorite.mockImplementation(async (id: string, favorite: boolean) => { mocks.favorites = favorite ? [...mocks.favorites, id] : mocks.favorites.filter(x=>x!==id); });
   mocks.getProgramText.mockResolvedValue({ blocks, updatedAt: "stamp" });
   mocks.getSongText.mockResolvedValue({
     blocks,
@@ -68,6 +75,29 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("Repertoire texts", () => {
+  it("stars songs and carols independently, filters favorites and persists removal", async () => {
+    show(<TextsPage section="koledy" canEdit={false} />);
+    const star = await screen.findByRole("button", {name:"Přidat do oblíbených: Koleda"});
+    await new Promise(resolve=>setTimeout(resolve,0));
+    fireEvent.click(star);
+    expect(await screen.findByRole("button",{name:"Odebrat z oblíbených: Koleda"})).toHaveAttribute("aria-pressed","true");
+    expect(mocks.setSongFavorite).toHaveBeenCalledWith("c",true);
+    fireEvent.change(screen.getByLabelText("Aktivita textů"),{target:{value:"all"}});
+    fireEvent.click(screen.getByRole("button",{name:"Oblíbené"}));
+    expect(screen.queryByRole("button",{name:"Detail: Skrytá koleda"})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button",{name:"Odebrat z oblíbených: Koleda"}));
+    expect(await screen.findByText("Žádné položky pro vybraný filtr.")).toBeVisible();
+    expect(mocks.setSongFavorite).toHaveBeenLastCalledWith("c",false);
+  });
+  it("shows a saved star in song detail and keeps it on failed removal", async () => {
+    mocks.favorites=["s"];
+    mocks.setSongFavorite.mockRejectedValue(new Error("Offline"));
+    show(<SongTextPage id="s" canEdit={false} />);
+    const star=await screen.findByRole("button",{name:"Odebrat z oblíbených: Obyčejná píseň"});
+    fireEvent.click(star);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Oblíbené se nepodařilo");
+    expect(star).toHaveAttribute("aria-pressed","true");
+  });
   it("confirms admin deletion and keeps an in-use error visible", async () => {
     mocks.deleteProgram.mockRejectedValue(
       new Error("Pásmo je použité v programu akce."),
@@ -125,7 +155,7 @@ describe("Repertoire texts", () => {
     fireEvent.change(screen.getByLabelText("Řazení textů"), {
       target: { value: "reverse" },
     });
-    expect(screen.getAllByRole("button")[0]).toHaveAccessibleName(
+    expect(screen.getAllByRole("button", {name: /^Detail:/})[0]).toHaveAccessibleName(
       "Detail: Skrytá koleda",
     );
     fireEvent.click(screen.getByRole("button", { name: "Detail: Koleda" }));

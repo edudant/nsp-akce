@@ -298,9 +298,9 @@ describe("feature UI flows", () => {
       "saved-set",
     );
   });
-  it("lets a musician report attendance without partner wishes", async () => {
+  it.each(["musician", "photographer"] as const)("lets a %s report attendance without partner wishes", async (role) => {
     const db = setup(fixture({ attendanceScope: "self" }));
-    db.members = [{ ...members[0], role: "musician" }, members[1]];
+    db.members = [{ ...members[0], role }, members[1]];
     db.accessMode = "member";
     db.myMemberId = "a";
     wrap(

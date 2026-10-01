@@ -269,6 +269,7 @@ export function ScoresPage() {
               <option value="leader">Tanečníci</option>
               <option value="follower">Tanečnice</option>
               <option value="musician">Muzikanti</option>
+              <option value="photographer">Fotografové</option>
             </Select>
             <Select
               aria-label="Řadit tabulku"

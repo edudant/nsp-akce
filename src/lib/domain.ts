@@ -1,6 +1,6 @@
 export type AppRole = "admin" | "member";
 export type AccessMode = "admin" | "member" | "shared";
-export type PairingRole = "leader" | "follower" | "musician";
+export type PairingRole = "leader" | "follower" | "musician" | "photographer";
 export type ExperienceLevel = "beginner" | "advanced" | "experienced";
 export type AgeGroup = "young" | "old";
 export type EventType = "rehearsal" | "performance";
@@ -268,6 +268,7 @@ export interface AppDatabase {
 }
 
 export interface SessionUser {
+  userId?: string;
   displayName: string;
   email?: string;
   memberId?: string;
@@ -373,10 +374,15 @@ export interface AppApi {
   ): Promise<{ code: string; email: string }>;
 }
 
+export function isDancer(role: PairingRole) {
+  return role === "leader" || role === "follower";
+}
+
 export const roleLabels: Record<PairingRole, string> = {
   leader: "Tanečník",
   follower: "Tanečnice",
   musician: "Muzikant",
+  photographer: "Fotograf",
 };
 
 export const experienceLabels: Record<ExperienceLevel, string> = {

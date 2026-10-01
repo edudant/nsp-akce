@@ -1,3 +1,4 @@
+import { isDancer } from "./domain";
 import { historyPairs, historyStandingIds } from "./pairSets";
 import { solve, type Constraint } from "yalps";
 import {
@@ -30,7 +31,7 @@ export function pairingParticipants(
 ): Member[] {
   return db.members.filter(
     (m) =>
-      m.role !== "musician" &&
+      isDancer(m.role) &&
       event.attendance.some(
         (r) =>
           r.memberId === m.id &&

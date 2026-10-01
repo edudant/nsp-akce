@@ -3,6 +3,9 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { applyTheme, getTheme } from "./lib/theme";
+
+applyTheme(getTheme());
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,4 +29,3 @@ createRoot(rootElement).render(
     </QueryClientProvider>
   </StrictMode>,
 );
-

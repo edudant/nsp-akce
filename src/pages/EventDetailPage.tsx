@@ -1,3 +1,4 @@
+import { isDancer } from "../lib/domain";
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { EventPairingEditor } from "../components/EventPairingEditor";
@@ -275,7 +276,7 @@ function EventContent({
               {myRecord.note && !canRespond && <p>{myRecord.note}</p>}
               {!canRespond && <p>Odpovědi jsou uzamčené. Změnu zadá admin.</p>}
               {member &&
-                member.role !== "musician" &&
+                isDancer(member.role) &&
                 event.type === "performance" &&
                 dance && (
                   <>

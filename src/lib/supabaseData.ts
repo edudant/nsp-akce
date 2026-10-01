@@ -30,7 +30,7 @@ interface MemberRow {
   id: string;
   display_name: string;
   short_name: string;
-  pairing_role: "lead" | "follow" | "musician";
+  pairing_role: "lead" | "follow" | "musician" | "photographer";
   experience_level: ExperienceLevel;
   age_group: AgeGroup | null;
   active_from: string | null;
@@ -177,7 +177,7 @@ interface ScoreViewRow {
 interface SharedScore {
   memberId: string;
   displayName: string;
-  pairingRole: "lead" | "follow" | "musician";
+  pairingRole: "lead" | "follow" | "musician" | "photographer";
   totalPoints: number | string;
   rehearsalPoints: number | string;
   performancePoints: number | string;
@@ -259,7 +259,7 @@ interface MemberHome {
     memberId: string;
     displayName: string;
     shortName: string;
-    pairingRole: "lead" | "follow" | "musician";
+    pairingRole: "lead" | "follow" | "musician" | "photographer";
     experienceLevel: ExperienceLevel;
   };
   score: LeaderboardScore;
@@ -271,7 +271,7 @@ interface LeaderboardScore {
   memberId: string;
   displayName: string;
   shortName?: string;
-  pairingRole: "lead" | "follow" | "musician";
+  pairingRole: "lead" | "follow" | "musician" | "photographer";
   totalPoints: number | string;
   possiblePoints: number | string;
   rehearsalPoints: number | string;
@@ -318,9 +318,9 @@ function numberValue(value: number | string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function pairingRole(value: "lead" | "follow" | "musician"): PairingRole {
-  return value === "musician"
-    ? "musician"
+function pairingRole(value: "lead" | "follow" | "musician" | "photographer"): PairingRole {
+  return value === "musician" || value === "photographer"
+    ? value
     : value === "lead"
       ? "leader"
       : "follower";
@@ -1566,8 +1566,8 @@ export const supabaseApi: Omit<
     if ("shortName" in patch) databasePatch.short_name = patch.shortName;
     if ("role" in patch) {
       databasePatch.pairing_role =
-        patch.role === "musician"
-          ? "musician"
+        patch.role === "musician" || patch.role === "photographer"
+          ? patch.role
           : patch.role === "leader"
             ? "lead"
             : "follow";
@@ -1595,8 +1595,8 @@ export const supabaseApi: Omit<
         display_name: input.fullName,
         short_name: input.shortName,
         pairing_role:
-          input.role === "musician"
-            ? "musician"
+          input.role === "musician" || input.role === "photographer"
+            ? input.role
             : input.role === "leader"
               ? "lead"
               : "follow",

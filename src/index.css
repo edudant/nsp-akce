@@ -1,10 +1,10 @@
 :root {
-  color-scheme: light;
+  color-scheme: only light;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-  color: #19251f;
-  background: #f4f0e7;
+  color: var(--ink);
+  background: var(--canvas);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   --green-950: #142a47;
@@ -37,6 +37,13 @@
   --radius-md: 14px;
   --radius-lg: 20px;
   --sidebar-width: 260px;
+  --surface-soft: #f8f7f2;
+  --text-muted: var(--muted-strong);
+  --green-950-fill: #142a47;
+  --green-900-fill: #244a70;
+  --green-800-fill: #34587c;
+  --green-700-fill: #46759a;
+  --red-700-fill: #b32632;
 }
 
 * {
@@ -208,7 +215,7 @@ textarea {
   padding: 10px 14px;
   border-radius: 8px;
   color: white;
-  background: var(--green-900);
+  background: var(--green-900-fill);
   transform: translateY(-150%);
 }
 
@@ -292,12 +299,12 @@ textarea {
 
 .button--primary {
   color: #fff;
-  background: var(--green-800);
+  background: var(--green-800-fill);
   box-shadow: 0 5px 12px rgba(18, 56, 46, 0.14);
 }
 
 .button--primary:hover:not(:disabled) {
-  background: var(--green-900);
+  background: var(--green-900-fill);
   box-shadow: 0 7px 18px rgba(18, 56, 46, 0.2);
 }
 
@@ -323,7 +330,7 @@ textarea {
 
 .button--danger {
   color: white;
-  background: var(--red-700);
+  background: var(--red-700-fill);
 }
 
 .icon-button {
@@ -595,7 +602,7 @@ textarea {
 }
 
 .toggle input:checked + .toggle__track {
-  background: var(--green-700);
+  background: var(--green-700-fill);
 }
 
 .toggle input:checked + .toggle__track .toggle__thumb {
@@ -620,7 +627,7 @@ textarea {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--green-700);
+  background: var(--green-700-fill);
 }
 
 .spin {
@@ -647,7 +654,7 @@ textarea {
   flex-direction: column;
   width: var(--sidebar-width);
   color: #f3f6f9;
-  background-color: var(--green-950);
+  background-color: var(--green-950-fill);
   background-image:
     linear-gradient(rgba(20, 42, 71, 0.96), rgba(20, 42, 71, 0.99)),
     url("./assets/postrekovo-ornament.jpg");
@@ -796,7 +803,7 @@ textarea {
   height: 37px;
   border-radius: 50%;
   color: white;
-  background: var(--red-700);
+  background: var(--red-700-fill);
   font-size: 0.68rem;
   font-weight: 850;
 }
@@ -1079,7 +1086,7 @@ textarea {
   height: 9px;
   border-top: 3px solid #f5e9cf;
   border-bottom: 3px solid #f5e9cf;
-  background: var(--red-700);
+  background: var(--red-700-fill);
 }
 
 .login-panel {
@@ -1936,7 +1943,7 @@ textarea {
 
 .filter-tabs button.is-active span {
   color: white;
-  background: var(--green-700);
+  background: var(--green-700-fill);
 }
 
 .toolbar-card__controls,
@@ -2267,7 +2274,7 @@ textarea {
 
 .calendar-grid > div.is-today > span {
   color: white;
-  background: var(--red-700);
+  background: var(--red-700-fill);
 }
 
 .calendar-event {
@@ -2574,7 +2581,7 @@ textarea {
 }
 
 .detail-tabs button.is-active::after {
-  background: var(--red-700);
+  background: var(--red-700-fill);
 }
 
 .detail-tabs button svg {
@@ -3054,7 +3061,7 @@ textarea {
   height: 49px;
   border-radius: 50%;
   color: white;
-  background: var(--green-700);
+  background: var(--green-700-fill);
 }
 
 .score-stat__icon--amber {
@@ -3093,7 +3100,7 @@ textarea {
 
 .score-stat--featured {
   color: white;
-  background: var(--green-900);
+  background: var(--green-900-fill);
   border-color: var(--green-900);
 }
 
@@ -4790,7 +4797,7 @@ tbody tr:hover {
     width: 25px;
     height: 3px;
     border-radius: 0 0 4px 4px;
-    background: var(--red-700);
+    background: var(--red-700-fill);
     content: "";
     transform: translateX(-50%);
   }
@@ -5418,7 +5425,7 @@ tbody tr:hover {
     height: 8px;
     border-top: 2px solid #f5e9cf;
     border-bottom: 2px solid #f5e9cf;
-    background: var(--red-700);
+    background: var(--red-700-fill);
     content: "";
   }
 
@@ -6205,7 +6212,7 @@ tbody tr:hover {
 .member-rsvp-actions button.is-active {
   border-color: var(--green-700);
   color: white;
-  background: var(--green-700);
+  background: var(--green-700-fill);
 }
 
 .member-event-rsvp button:disabled,
@@ -7140,3 +7147,64 @@ tbody tr:hover {
 .song-order-list__number { color: var(--muted); }
 .song-drag-handle { touch-action: none; cursor: grab; }
 .song-drag-handle:active { cursor: grabbing; }
+
+/* The chosen theme is explicit; OS/browser auto dark mode cannot override light. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #101923;
+  --paper: #192532;
+  --paper-strong: #1e2d3d;
+  --surface-soft: #172330;
+  --ink: #e4ebf3;
+  --muted: #a8b6c5;
+  --muted-strong: #c0cbd7;
+  --border: #455365;
+  --border-soft: #334252;
+  --green-950: #e1ecf7;
+  --green-900: #bedaf0;
+  --green-800: #a5cde9;
+  --green-700: #8fbee0;
+  --green-100: #2b4359;
+  --green-50: #24384c;
+  --red-800: #ffb0b8;
+  --red-700: #f49da5;
+  --red-100: #532c37;
+  --red-50: #39252f;
+  --amber-700: #eac977;
+  --amber-100: #4b4027;
+  --amber-50: #322d23;
+  --blue-700: #a1cdee;
+  --blue-100: #2a4057;
+  --blue-50: #223346;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,.18);
+  --shadow-md: 0 16px 42px rgba(0,0,0,.3);
+}
+:root[data-theme="dark"] body { background-image: none; }
+:root[data-theme="dark"] :is(.card, .login-card, .login-page, .login-panel, .configuration-error, .page--dashboard .page-header, .next-event-card--empty, .mobile-header, .bottom-nav) { background: var(--paper); }
+:root[data-theme="dark"] :is(.auth-tabs, .view-switch, .roster-mode-switch, .pairing-scope-switch, .filter-tabs button span, .badge, .progress, .saved-pairs > div > span:first-child, .pair-number) { background: var(--border-soft); }
+:root[data-theme="dark"] :is(.auth-tabs button.is-active, .view-switch button.is-active, .calendar-card__header button, .event-type-picker button, .roster-mode-switch button.is-active, .status-control button, .partial-minutes, .pairing-scope-switch button.is-active, .pairing-block-item > div:first-child button, .pairing-block-programs label, .pair-round__programs > span:not(.pair-round__program-label), .lock-button, .shared-code button) { background: var(--paper-strong); }
+:root[data-theme="dark"] :is(.email-login-step__address, .data-state--empty, .upcoming-list__empty, .calendar-weekdays, .calendar-grid > div.is-outside, .roster-toolbar, .roster-list__heading, th, .pairing-block-item, .pair-round > header, .pair-reason p, .shared-code, .event-program-editor__empty, .date-tile, .avatar-stack > span) { background: var(--surface-soft); }
+:root[data-theme="dark"] :is(input:disabled, textarea:disabled, select:disabled) { color: var(--muted); background: var(--surface-soft); }
+:root[data-theme="dark"] :is(.button--ghost:hover:not(:disabled), .roster-row:hover, tbody tr:hover, .candidate-list label:hover, .status-control button:hover, .pairing-table .is-clickable:hover, .song-order-list li.is-dragging) { background: var(--green-50); }
+:root[data-theme="dark"] .next-event-card--empty .button--secondary { color: var(--green-900); background: var(--paper-strong); }
+:root[data-theme="dark"] :is(.program-reader, .program-block--note, .program-inline-note) { color: var(--ink); }
+:root[data-theme="dark"] .bottom-nav a { color: var(--muted); }
+:root[data-theme="dark"] :is(.badge--purple, .avatar--musician, .avatar--photographer) { color: #d9baee; background: #443250; }
+:root[data-theme="dark"] :is(.response-badge--yes, .choice-buttons label.is-selected) { color: #a8e4c3; background: #203f36; }
+:root[data-theme="dark"] :is(.response-badge--no, .choice-buttons .choice--no.is-selected, .choice-buttons .choice--absent.is-selected) { color: var(--red-800); border-color: var(--red-700); background: var(--red-50); }
+:root[data-theme="dark"] :is(.response-badge--maybe, .choice-buttons .choice--maybe.is-selected, .choice-buttons .choice--partial.is-selected) { color: var(--amber-700); border-color: var(--amber-700); background: var(--amber-50); }
+:root[data-theme="dark"] .rank--1 { color: var(--amber-700); background: var(--amber-100); }
+:root[data-theme="dark"] .rank--2 { color: var(--ink); background: var(--border-soft); }
+:root[data-theme="dark"] .rank--3 { color: #ebbc93; background: #46362c; }
+:root[data-theme="dark"] .score-stat--featured .score-stat__icon { background: var(--amber-100); }
+:root[data-theme="dark"] .toggle__thumb { color: #34587c; }
+
+.sidebar__theme-toggle { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 10px 12px; margin-bottom: 8px; color: #edf4fb; background: transparent; border: 1px solid rgba(255,255,255,.18); border-radius: 8px; font-size: .85rem; text-align: left; cursor: pointer; }
+.sidebar__theme-toggle:hover { background: rgba(255,255,255,.09); }
+.theme-switch-track { margin-left: auto; width: 36px; height: 22px; padding: 3px; border-radius: 20px; background: #65778a; flex-shrink: 0; }
+.theme-switch-track > span { display: block; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s ease; }
+.sidebar__theme-toggle[aria-checked="true"] .theme-switch-track { background: #46759a; }
+.sidebar__theme-toggle[aria-checked="true"] .theme-switch-track > span { transform: translateX(14px); }
+.song-favorite.is-favorite { color: var(--amber-700); }
+.song-favorite { flex-shrink: 0; }
+.avatar--photographer { color: #684b7b; background: #ebe3f4; }

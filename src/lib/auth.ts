@@ -148,6 +148,7 @@ async function mapSession(session: Session | null): Promise<SessionUser | null> 
       return null;
     }
     return {
+      userId: session.user.id,
       accessMode: "shared",
       displayName: "Člen souboru",
       role: "member",
@@ -183,6 +184,7 @@ async function mapSession(session: Session | null): Promise<SessionUser | null> 
     session.user.user_metadata.full_name ?? session.user.user_metadata.name;
   const role = strongestRole(roles);
   return {
+    userId: session.user.id,
     accessMode: role,
     displayName:
       profile?.display_name?.trim() ||
@@ -320,7 +322,9 @@ export async function signInWithSharedCode(
         "Sdílený kód není platný nebo bylo zadáno příliš mnoho pokusů.",
       );
     }
+    const verifiedSession = await client.auth.getSession();
     return {
+      userId: verifiedSession.data.session?.user.id,
       accessMode: "shared",
       displayName: "Člen souboru",
       role: "member",

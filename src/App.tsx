@@ -127,7 +127,7 @@ export default function App() {
     );
   }
 
-  const accountScope = `${session.email ?? session.memberId ?? session.displayName}:${session.accessMode}`;
+  const accountScope = `${session.userId ?? session.email ?? session.memberId ?? session.displayName}:${session.accessMode}`;
   const memberPreview =
     session.role === "admin" && previewAccount === accountScope;
   const canRecord = session.role === "admin" && !memberPreview;
