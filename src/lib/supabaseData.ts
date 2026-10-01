@@ -1219,7 +1219,7 @@ async function cleanupPairingRun(runId: string): Promise<void> {
   await requireSupabase().from("pairing_runs").delete().eq("id", runId);
 }
 
-export const supabaseApi: Omit<AppApi, "setPartnerWishes" | "saveSeason" | "getScores" | "saveSong" | "saveSongCategory" | "saveSongSeries" | "deleteSongSeries" | "updateEvent" | "generateMemberLoginCode" | "getEventAudit"> = {
+export const supabaseApi: Omit<AppApi, "setPartnerWishes" | "saveSeason" | "getScores" | "saveSong" | "saveSongCategory" | "saveSongSeries" | "deleteSongSeries" | "updateEvent" | "generateMemberLoginCode" | "getEventAudit" | "addAttendanceBatch"> = {
   getDatabase,
 
   async getMembers() {

@@ -15,7 +15,7 @@ import {
   type PairingTuning,
 } from "../lib/seasonPairing";
 import { generatePairsAsync } from "../lib/pairingClient";
-import { memberGroups } from "../lib/ensembleRules";
+import { PairingRoster } from "../components/PairingRoster";
 import type { AppDatabase, EnsembleEvent, DancePair } from "../lib/domain";
 function readPairingEventId() {
   return (
@@ -134,13 +134,6 @@ function PairingEditor({
   const eligible = selected.filter(
     (m) => !event.attendance.find((r) => r.memberId === m.id)?.standing,
   );
-  const used = new Set(pairs.flatMap((p) => [p.leaderId, p.followerId]));
-  const change = (index: number, patch: Partial<DancePair>) =>
-    setDraft(
-      pairs.map((p, i) =>
-        i === index ? { ...p, ...patch, reason: "Ručně upravený pár." } : p,
-      ),
-    );
   return (
     <>
       {admin && (
@@ -305,144 +298,14 @@ function PairingEditor({
             {w}
           </p>
         ))}
-        {([false, true] as const).map((below) => (
-          <section key={String(below)}>
-            <h3>{below ? "Pod čarou" : "Hlavní sestava"}</h3>
-            <div className="feature-list">
-              {pairs.map((pair, index) => {
-                if (!!pair.belowLine !== below) return null;
-                return (
-                  <div key={pair.id} className="pair-edit-row">
-                    {admin ? (
-                      <>
-                        <Select
-                          aria-label={`Muž v páru ${index + 1}`}
-                          value={pair.leaderId}
-                          onChange={(e) =>
-                            change(index, { leaderId: e.target.value })
-                          }
-                        >
-                          {eligible
-                            .filter((m) => m.role === "leader")
-                            .map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {m.fullName}
-                              </option>
-                            ))}
-                        </Select>
-                        <Select
-                          aria-label={`Žena v páru ${index + 1}`}
-                          value={pair.followerId}
-                          onChange={(e) =>
-                            change(index, { followerId: e.target.value })
-                          }
-                        >
-                          {eligible
-                            .filter((m) => m.role === "follower")
-                            .map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {m.fullName}
-                              </option>
-                            ))}
-                        </Select>
-                        <Select
-                          aria-label={`Skupina páru ${index + 1}`}
-                          value={pair.ageGroup ?? ""}
-                          onChange={(e) =>
-                            change(index, {
-                              ageGroup: e.target.value as DancePair["ageGroup"],
-                            })
-                          }
-                        >
-                          <option value="">Vyberte skupinu</option>
-                          <option value="old">Starý</option>
-                          <option value="young">Mladý</option>
-                        </Select>
-                        {event.type === "performance" && (
-                          <label>
-                            <input
-                              type="checkbox"
-                              checked={!!pair.belowLine}
-                              onChange={(e) =>
-                                change(index, { belowLine: e.target.checked })
-                              }
-                            />{" "}
-                            Pod čarou
-                          </label>
-                        )}
-                        {pair.reason && (
-                          <small className="pair-reason">{pair.reason}</small>
-                        )}
-                        <Button
-                          variant="ghost"
-                          onClick={() =>
-                            setDraft(pairs.filter((_, i) => i !== index))
-                          }
-                        >
-                          Odebrat pár
-                        </Button>
-                      </>
-                    ) : (
-                      <span>
-                        {
-                          db.members.find((m) => m.id === pair.leaderId)
-                            ?.fullName
-                        }{" "}
-                        +{" "}
-                        {
-                          db.members.find((m) => m.id === pair.followerId)
-                            ?.fullName
-                        }{" "}
-                        · {pair.ageGroup === "young" ? "Mladý" : "Starý"}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        ))}
-        {admin && (
-          <Button
-            variant="secondary"
-            onClick={() => {
-              const a = eligible.find(
-                (m) => m.role === "leader" && !used.has(m.id),
-              );
-              const b = eligible.find(
-                (m) =>
-                  m.role === "follower" &&
-                  !used.has(m.id) &&
-                  a &&
-                  memberGroups(m).some((g) => memberGroups(a).includes(g)),
-              );
-              if (a && b)
-                setDraft([
-                  ...pairs,
-                  {
-                    id: crypto.randomUUID(),
-                    leaderId: a.id,
-                    followerId: b.id,
-                    round: 1,
-                    ageGroup: memberGroups(a).find((g) =>
-                      memberGroups(b).includes(g),
-                    ),
-                    belowLine: true,
-                  },
-                ]);
-              else setMessage("Není další kompatibilní dvojice.");
-            }}
-          >
-            Přidat pár ručně
-          </Button>
-        )}
-        <h3>Bez páru</h3>
-        <p>
-          {selected
-            .filter((m) => !used.has(m.id))
-            .map((m) => m.fullName)
-            .join(", ") || "Nikdo"}
-        </p>
+        <PairingRoster
+          db={db}
+          event={event}
+          pairs={pairs}
+          admin={admin}
+          disabled={generate.isPending || selection.isPending || save.isPending}
+          onChange={setDraft}
+        />
         {admin && (
           <>
             <Help title="Uložení a zveřejnění">
@@ -462,7 +325,7 @@ function PairingEditor({
                 <Button
                   disabled={
                     !!error ||
-                    pairs.length === 0 ||
+                    (pairs.length === 0 && draft === null) ||
                     generate.isPending ||
                     selection.isPending
                   }

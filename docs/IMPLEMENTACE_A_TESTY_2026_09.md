@@ -188,3 +188,29 @@ skupin a zákazů. Zátěžový příklad 50 členů vytvořil 25 párů bez upo
 
 Produkční build navíc ověřen na mobilu 320 px: načtení workeru, generování
 staré akce, přepnutí akce přes URL bez reloadu a vysvětlení prázdného výsledku.
+
+## Bulk účast a kompaktní páry (1. 10.)
+
+- Přidání více členů má společnou nahlášenou i skutečnou účast, poznámku
+  a procenta pro částečnou účast. Jeden RPC zapíše celý výběr v transakci;
+  seznam, scores a audit se obnoví společně. Chyba zachová výběr pro retry.
+- Adminova odpověď se ukládá výběrem. Poznámka a procenta mají vlastní malé
+  tlačítko; členské hlasování zachovává explicitní uložení odpovědi.
+- Generátor zobrazuje páry v tabulce s detailem pro změnu partnera, skupiny,
+  zařazení pod čáru a zrušení páru. Nabídka respektuje role, skupiny, zákazy
+  i stání; nejprve nabízí členy bez páru, potom obsazené s aktuálním partnerem.
+  Přesun obsazeného člena rozpustí jeho původní pár. Členové bez páru jsou
+  pod čarou a kliknutím na jméno lze vybrat partnera. Úpravy zůstávají v návrhu
+  do uložení nebo zveřejnění.
+
+Před frontendem nasadit `20261001090000_bulk_attendance.sql` podle produkčního
+release postupu. Nový endpoint je pouze pro admina a zachovává audit triggers.
+`bulk_attendance_test.sql` používá syntetické fixtures a rollback; je součástí
+lokálního reset scriptu. Kontroluje 50 členů, deduplikaci, procentní body,
+původní členskou odpověď, audit, rollback při chybě během zápisu a oprávnění.
+
+Ověřeno: `npm run check` (115 UI/unit testů a build), přehrání všech migrací
+a bulk SQL test v izolovaném PostgreSQL 17 s Auth stubem. Chromium smoke test
+se syntetickými mock daty ověřil bulk request, editaci/vytvoření/zrušení párů,
+uložení odpovědi a procent, desktop i mobilní šířky 390 a 320 px. Docker
+Supabase integration/browser suite nebyla v tomto prostředí spuštěna.

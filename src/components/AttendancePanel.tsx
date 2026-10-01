@@ -4,6 +4,7 @@ import type {
   AppDatabase,
   EnsembleEvent,
   AttendanceRecord,
+  AttendanceDefaults,
   InterestStatus,
   Member,
 } from "../lib/domain";
@@ -33,7 +34,7 @@ export function ResponseEditor({
   event: EnsembleEvent;
   record: AttendanceRecord;
   admin?: boolean;
-  onSave: (response: InterestStatus, note: string) => void;
+  onSave: (response: InterestStatus, note: string) => void | Promise<unknown>;
   pending: boolean;
 }) {
   const [response, setResponse] = useState<InterestStatus>(record.interest);
@@ -42,10 +43,14 @@ export function ResponseEditor({
   return (
     <form
       className="response-editor"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
         if (response === "maybe" && !note.trim()) return;
-        onSave(response, note);
+        try {
+          await onSave(response, note);
+        } catch {
+          // Keep the draft note available for retry; the parent shows the error.
+        }
       }}
     >
       <ChoiceButtons
@@ -57,7 +62,16 @@ export function ResponseEditor({
             ? [...responseChoices, { value: "unset", label: "Bez odpovědi" }]
             : responseChoices
         }
-        onChange={setResponse}
+        onChange={async (value) => {
+          setResponse(value);
+          if (admin && (value !== "maybe" || note.trim())) {
+            try {
+              await onSave(value, note);
+            } catch {
+              setResponse(record.interest);
+            }
+          }
+        }}
       />
       {(response === "maybe" || event.type === "performance" || !!note) && (
         <input
@@ -70,17 +84,29 @@ export function ResponseEditor({
           onChange={(e) => setNote(e.target.value)}
         />
       )}
-      <Button
-        type="submit"
-        disabled={
-          !allowed ||
-          (response === "unset" && !admin) ||
-          (response === "maybe" && !note.trim())
-        }
-        loading={pending}
-      >
-        Uložit odpověď
-      </Button>
+      {(!admin ||
+        response === "maybe" ||
+        event.type === "performance" ||
+        !!note) && (
+        <Button
+          type="submit"
+          size={admin ? "small" : "medium"}
+          disabled={
+            !allowed ||
+            (response === "unset" && !admin) ||
+            (response === "maybe" && !note.trim()) ||
+            (admin &&
+              response === record.interest &&
+              note === (record.note ?? ""))
+          }
+          loading={pending}
+        >
+          {admin ? "Uložit poznámku" : "Uložit odpověď"}
+        </Button>
+      )}
+      {admin && (
+        <small>Odpověď se uloží výběrem. Poznámku uložte tlačítkem.</small>
+      )}
     </form>
   );
 }
@@ -95,6 +121,12 @@ export function AttendancePanel({
 }) {
   const query = useQueryClient();
   const [addIds, setAddIds] = useState<string[]>([]);
+  const [addDefaults, setAddDefaults] = useState<AttendanceDefaults>({
+    interest: "unset",
+    status: "present",
+    attendancePercent: 50,
+    note: "",
+  });
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState("");
   const [addSearch, setAddSearch] = useState("");
@@ -118,20 +150,23 @@ export function AttendancePanel({
     },
   });
   const batchAdd = useMutation({
-    mutationFn: async (ids: string[]) => {
-      for (const memberId of ids) {
-        await appApi.updateAttendance(event.id, memberId, {
-          selected: true,
-          status: "present",
-        });
-        setAddIds((current) => current.filter((id) => id !== memberId));
-      }
-    },
-    onSettled: async (_, error) => {
-      await query.invalidateQueries({ queryKey: databaseQueryKey });
-      await query.invalidateQueries({ queryKey: ["event-audit"] });
-      await query.invalidateQueries({ queryKey: ["scores"] });
-      if (!error) setAdding(false);
+    mutationFn: (ids: string[]) =>
+      appApi.addAttendanceBatch(event.id, ids, {
+        interest: addDefaults.interest,
+        status: addDefaults.status,
+        note: addDefaults.note,
+        ...(addDefaults.status === "partial"
+          ? { attendancePercent: addDefaults.attendancePercent }
+          : {}),
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        query.invalidateQueries({ queryKey: databaseQueryKey }),
+        query.invalidateQueries({ queryKey: ["event-audit"] }),
+        query.invalidateQueries({ queryKey: ["scores"] }),
+      ]);
+      setAddIds([]);
+      setAdding(false);
     },
   });
   const relevant = (r: AttendanceRecord) =>
@@ -205,6 +240,7 @@ export function AttendancePanel({
                 setAdding(true);
                 setAddSearch("");
                 setAddIds([]);
+                batchAdd.reset();
               }
             : undefined
         }
@@ -221,8 +257,8 @@ export function AttendancePanel({
       {admin && (
         <Help title="Výběr a skutečná účast">
           <p>
-            Přidání člena rovnou zapíše plnou účast a vybere jej pro párování. V
-            detailu přepínači změníte skutečnou účast; procenta, odpověď a
+            Při přidání členů nastavíte společnou nahlášenou a skutečnou účast.
+            V detailu přepínači změníte skutečnou účast; procenta, odpověď a
             historii najdete po kliknutí na jméno. Nepřítomní a omluvení se do
             generátoru nevybírají.
           </p>
@@ -335,7 +371,7 @@ export function AttendancePanel({
                   admin
                   pending={update.isPending}
                   onSave={(interest, note) =>
-                    update.mutate({
+                    update.mutateAsync({
                       memberId: detailMember.id,
                       patch: { interest, note },
                     })
@@ -363,32 +399,18 @@ export function AttendancePanel({
                 <>
                   {attendanceSwitches(detailMember, detailRecord)}
                   {detailRecord.status === "partial" && (
-                    <label className="field">
-                      Účast %
-                      <input
-                        aria-label={`Procento účasti ${detailMember.fullName}`}
-                        disabled={update.isPending}
-                        type="number"
-                        min="0.001"
-                        max="99.999"
-                        step="0.001"
-                        defaultValue={detailRecord.attendancePercent ?? 50}
-                        onBlur={(e) => {
-                          if (
-                            e.target.checkValidity() &&
-                            Number(e.target.value) !==
-                              detailRecord.attendancePercent
-                          )
-                            update.mutate({
-                              memberId: detailMember.id,
-                              patch: {
-                                status: "partial",
-                                attendancePercent: Number(e.target.value),
-                              },
-                            });
-                        }}
-                      />
-                    </label>
+                    <AttendancePercentEditor
+                      key={`${detailMember.id}:${detailRecord.attendancePercent}`}
+                      memberName={detailMember.fullName}
+                      percent={detailRecord.attendancePercent ?? 50}
+                      pending={update.isPending}
+                      onSave={(attendancePercent) =>
+                        update.mutate({
+                          memberId: detailMember.id,
+                          patch: { status: "partial", attendancePercent },
+                        })
+                      }
+                    />
                   )}
                   <p>Změny skutečné účasti se ukládají ihned.</p>
                   <Button
@@ -460,6 +482,11 @@ export function AttendancePanel({
                 title="Historie změn účasti"
               />
             )}
+            {update.error && (
+              <p role="alert" className="form-error">
+                {update.error.message}
+              </p>
+            )}
           </div>
         )}
       </Dialog>
@@ -467,63 +494,162 @@ export function AttendancePanel({
         <Dialog
           title="Přidat účastníky"
           open={adding}
-          onClose={() => setAdding(false)}
+          onClose={() => {
+            if (!batchAdd.isPending) setAdding(false);
+          }}
         >
-          <div className="feature-toolbar">
-            <input
-              autoFocus
-              aria-label="Hledat člena k přidání"
-              placeholder="Hledat jméno…"
-              value={addSearch}
-              onChange={(e) => setAddSearch(e.target.value)}
-            />
-            <Select
-              aria-label="Řazení při přidávání"
-              value={sort}
-              onChange={(e) => setSort(e.target.value as typeof sort)}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (
+                addIds.length &&
+                !batchAdd.isPending &&
+                (addDefaults.interest !== "maybe" || addDefaults.note?.trim())
+              )
+                batchAdd.mutate(addIds);
+            }}
+          >
+            <fieldset
+              className="attendance-defaults"
+              disabled={batchAdd.isPending}
             >
-              <option value="activity">Aktivita</option>
-              <option value="name">Jméno</option>
-            </Select>
-          </div>
-          <div className="compact-list">
-            {available.map((m) => (
-              <label className="compact-row" key={m.id}>
-                <span className="compact-row__text">
-                  <strong>{m.fullName}</strong>
-                  <small>
-                    {memberActivity(db, m.id, event.seasonId).count} zkoušek ·{" "}
-                    {
-                      interestLabels[
-                        event.attendance.find((r) => r.memberId === m.id)
-                          ?.interest ?? "unset"
-                      ]
-                    }
-                  </small>
-                </span>
-                <input
-                  type="checkbox"
-                  aria-label={`Vybrat ${m.fullName}`}
-                  checked={addIds.includes(m.id)}
-                  disabled={batchAdd.isPending}
+              <legend>Výchozí účast pro vybrané členy</legend>
+              <label className="field">
+                Nahlášená účast
+                <Select
+                  aria-label="Výchozí nahlášená účast"
+                  value={addDefaults.interest}
                   onChange={(e) =>
-                    setAddIds(
-                      e.target.checked
-                        ? [...addIds, m.id]
-                        : addIds.filter((id) => id !== m.id),
-                    )
+                    setAddDefaults({
+                      ...addDefaults,
+                      interest: e.target.value as InterestStatus,
+                    })
+                  }
+                >
+                  <option value="unset">Bez odpovědi</option>
+                  {responseChoices.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="field">
+                Skutečná účast
+                <Select
+                  aria-label="Výchozí skutečná účast"
+                  value={addDefaults.status}
+                  onChange={(e) =>
+                    setAddDefaults({
+                      ...addDefaults,
+                      status: e.target.value as AttendanceRecord["status"],
+                    })
+                  }
+                >
+                  {Object.entries(attendanceLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              {addDefaults.status === "partial" && (
+                <label className="field">
+                  Účast %
+                  <input
+                    aria-label="Výchozí procento účasti"
+                    type="number"
+                    min="0.001"
+                    max="99.999"
+                    step="0.001"
+                    required
+                    value={addDefaults.attendancePercent ?? ""}
+                    onChange={(e) =>
+                      setAddDefaults({
+                        ...addDefaults,
+                        attendancePercent:
+                          e.target.value === ""
+                            ? undefined
+                            : Number(e.target.value),
+                      })
+                    }
+                  />
+                </label>
+              )}
+              <label className="field">
+                Poznámka{addDefaults.interest === "maybe" ? " (povinná)" : ""}
+                <input
+                  aria-label="Společná poznámka k odpovědi"
+                  maxLength={500}
+                  required={addDefaults.interest === "maybe"}
+                  value={addDefaults.note ?? ""}
+                  onChange={(e) =>
+                    setAddDefaults({ ...addDefaults, note: e.target.value })
                   }
                 />
               </label>
-            ))}
-          </div>
-          <Button
-            disabled={!addIds.length}
-            loading={batchAdd.isPending}
-            onClick={() => batchAdd.mutate(addIds)}
-          >
-            Přidat vybrané ({addIds.length})
-          </Button>
+            </fieldset>
+            <div className="feature-toolbar">
+              <input
+                autoFocus
+                aria-label="Hledat člena k přidání"
+                placeholder="Hledat jméno…"
+                value={addSearch}
+                disabled={batchAdd.isPending}
+                onChange={(e) => setAddSearch(e.target.value)}
+              />
+              <Select
+                aria-label="Řazení při přidávání"
+                value={sort}
+                disabled={batchAdd.isPending}
+                onChange={(e) => setSort(e.target.value as typeof sort)}
+              >
+                <option value="activity">Aktivita</option>
+                <option value="name">Jméno</option>
+              </Select>
+            </div>
+            <div className="compact-list">
+              {available.map((m) => (
+                <label className="compact-row" key={m.id}>
+                  <span className="compact-row__text">
+                    <strong>{m.fullName}</strong>
+                    <small>
+                      {memberActivity(db, m.id, event.seasonId).count} zkoušek ·{" "}
+                      {
+                        interestLabels[
+                          event.attendance.find((r) => r.memberId === m.id)
+                            ?.interest ?? "unset"
+                        ]
+                      }
+                    </small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    aria-label={`Vybrat ${m.fullName}`}
+                    checked={addIds.includes(m.id)}
+                    disabled={batchAdd.isPending}
+                    onChange={(e) =>
+                      setAddIds(
+                        e.target.checked
+                          ? [...addIds, m.id]
+                          : addIds.filter((id) => id !== m.id),
+                      )
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+            <Button
+              type="submit"
+              disabled={
+                !addIds.length ||
+                (addDefaults.interest === "maybe" && !addDefaults.note?.trim())
+              }
+              loading={batchAdd.isPending}
+            >
+              Přidat vybrané ({addIds.length})
+            </Button>
+          </form>
           {batchAdd.error && (
             <p role="alert" className="form-error">
               {batchAdd.error.message}
@@ -537,6 +663,52 @@ export function AttendancePanel({
         </Dialog>
       )}
     </Card>
+  );
+}
+
+function AttendancePercentEditor({
+  memberName,
+  percent,
+  pending,
+  onSave,
+}: {
+  memberName: string;
+  percent: number;
+  pending: boolean;
+  onSave: (percent: number) => void;
+}) {
+  const [value, setValue] = useState(String(percent));
+  return (
+    <form
+      className="attendance-percent-editor"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave(Number(value));
+      }}
+    >
+      <label className="field">
+        Účast %
+        <input
+          aria-label={`Procento účasti ${memberName}`}
+          disabled={pending}
+          type="number"
+          min="0.001"
+          max="99.999"
+          step="0.001"
+          required
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+      </label>
+      <Button
+        type="submit"
+        size="small"
+        loading={pending}
+        disabled={Number(value) === percent}
+      >
+        Uložit procenta
+      </Button>
+    </form>
   );
 }
 

@@ -21,6 +21,7 @@ import { EventForm } from "./EventForm";
 import type { AppDatabase, EnsembleEvent, Member } from "../lib/domain";
 const api = vi.hoisted(() => ({
   updateAttendance: vi.fn(),
+  addAttendanceBatch: vi.fn(),
   savePairs: vi.fn(),
   generatePairs: vi.fn(),
   updateMyResponse: vi.fn(),
@@ -132,6 +133,7 @@ const wrap = (child: React.ReactNode) =>
 beforeEach(() => {
   vi.clearAllMocks();
   api.updateAttendance.mockResolvedValue(fixture());
+  api.addAttendanceBatch.mockResolvedValue(undefined);
   api.saveSongSeries.mockResolvedValue(undefined);
 });
 afterEach(cleanup);
@@ -219,12 +221,18 @@ describe("feature UI flows", () => {
     wrap(<PairingPage canEdit />);
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Vygenerovat návrh" }));
-    await screen.findByLabelText("Muž v páru 1");
+    await user.click(
+      await screen.findByRole("button", { name: "Detail páru: Adam + Žofie" }),
+    );
     await user.click(screen.getByRole("checkbox", { name: "Pod čarou" }));
+    await user.click(screen.getByRole("button", { name: "Hotovo" }));
     await user.click(screen.getByRole("checkbox", { name: "Další muž" }));
     expect(
       await screen.findByText(/Ostatní ruční úpravy zůstaly/),
     ).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "Detail páru: Adam + Žofie" }),
+    );
     expect(screen.getByRole("checkbox", { name: "Pod čarou" })).toBeChecked();
     expect(screen.getByLabelText("Muž v páru 1")).toHaveValue("a");
   });
@@ -306,10 +314,12 @@ describe("feature UI flows", () => {
     await user.click(
       within(dialog).getByRole("button", { name: "Přidat vybrané (1)" }),
     );
-    expect(api.updateAttendance).toHaveBeenCalledWith("e", "b", {
-      selected: true,
+    expect(api.addAttendanceBatch).toHaveBeenCalledWith("e", ["b"], {
+      interest: "unset",
       status: "present",
+      note: "",
     });
+    expect(api.updateAttendance).not.toHaveBeenCalled();
   });
   it("excludes songs already used on the event and confirms one series", async () => {
     const user = userEvent.setup();
@@ -375,6 +385,270 @@ describe("feature UI flows", () => {
       target: { value: "s" },
     });
     expect(screen.getByLabelText("Odhad párů Starý")).toBeInTheDocument();
+  });
+});
+
+describe("admin bulk attendance and direct response editing", () => {
+  it("adds multiple members in one request with shared response, note and percentage", async () => {
+    const user = userEvent.setup(),
+      event = fixture(),
+      db = setup(event);
+    wrap(<AttendancePanel db={db} event={event} admin />);
+    await user.click(screen.getByRole("button", { name: "Přidat člena" }));
+    await user.selectOptions(
+      screen.getByLabelText("Výchozí nahlášená účast"),
+      "maybe",
+    );
+    await user.selectOptions(
+      screen.getByLabelText("Výchozí skutečná účast"),
+      "partial",
+    );
+    await user.clear(screen.getByLabelText("Výchozí procento účasti"));
+    await user.type(screen.getByLabelText("Výchozí procento účasti"), "75");
+    await user.click(screen.getByRole("checkbox", { name: "Vybrat Adam" }));
+    await user.click(screen.getByRole("checkbox", { name: "Vybrat Žofie" }));
+    expect(
+      screen.getByRole("button", { name: "Přidat vybrané (2)" }),
+    ).toBeDisabled();
+    await user.type(
+      screen.getByLabelText("Společná poznámka k odpovědi"),
+      "Pracovní směna",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Přidat vybrané (2)" }),
+    );
+    expect(api.addAttendanceBatch).toHaveBeenCalledExactlyOnceWith(
+      "e",
+      ["a", "b"],
+      {
+        interest: "maybe",
+        status: "partial",
+        attendancePercent: 75,
+        note: "Pracovní směna",
+      },
+    );
+    expect(api.updateAttendance).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+  it("keeps the selection and defaults available for retry when a bulk request fails", async () => {
+    const user = userEvent.setup(),
+      event = fixture(),
+      db = setup(event);
+    api.addAttendanceBatch.mockRejectedValueOnce(new Error("Zápis selhal"));
+    wrap(<AttendancePanel db={db} event={event} admin />);
+    await user.click(screen.getByRole("button", { name: "Přidat člena" }));
+    await user.selectOptions(
+      screen.getByLabelText("Výchozí nahlášená účast"),
+      "yes",
+    );
+    await user.selectOptions(
+      screen.getByLabelText("Výchozí skutečná účast"),
+      "unknown",
+    );
+    await user.click(screen.getByRole("checkbox", { name: "Vybrat Adam" }));
+    await user.click(
+      screen.getByRole("button", { name: "Přidat vybrané (1)" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("Zápis selhal");
+    expect(screen.getByRole("checkbox", { name: "Vybrat Adam" })).toBeChecked();
+    expect(screen.getByLabelText("Výchozí nahlášená účast")).toHaveValue("yes");
+    await user.click(
+      screen.getByRole("button", { name: "Přidat vybrané (1)" }),
+    );
+    expect(api.addAttendanceBatch).toHaveBeenLastCalledWith("e", ["a"], {
+      interest: "yes",
+      status: "unknown",
+      note: "",
+    });
+  });
+  it("saves an admin vote immediately and requires a note before saving maybe", async () => {
+    const user = userEvent.setup(),
+      save = vi.fn(),
+      event = fixture();
+    render(
+      <ResponseEditor
+        event={event}
+        record={event.attendance[0]}
+        admin
+        pending={false}
+        onSave={save}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Uložit odpověď" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Přijdu" }));
+    expect(save).toHaveBeenCalledExactlyOnceWith("yes", "");
+    save.mockClear();
+    await user.click(screen.getByRole("radio", { name: "Zatím nevím" }));
+    expect(save).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Uložit poznámku" }),
+    ).toBeDisabled();
+    await user.type(screen.getByLabelText("Poznámka k odpovědi"), "Čekám");
+    await user.click(screen.getByRole("button", { name: "Uložit poznámku" }));
+    expect(save).toHaveBeenCalledExactlyOnceWith("maybe", "Čekám");
+  });
+  it("saves percentage only with its own button", async () => {
+    const user = userEvent.setup(),
+      event = fixture();
+    event.attendance[0] = {
+      ...event.attendance[0],
+      selected: true,
+      status: "partial",
+      attendancePercent: 50,
+    };
+    const db = setup(event);
+    wrap(<AttendancePanel db={db} event={event} admin />);
+    await user.click(screen.getByRole("button", { name: "Detail: Adam" }));
+    await user.clear(screen.getByLabelText("Procento účasti Adam"));
+    await user.type(screen.getByLabelText("Procento účasti Adam"), "65");
+    await user.tab();
+    expect(api.updateAttendance).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Uložit procenta" }));
+    expect(api.updateAttendance).toHaveBeenCalledExactlyOnceWith("e", "a", {
+      status: "partial",
+      attendancePercent: 65,
+    });
+  });
+});
+
+describe("compact pair management", () => {
+  function setupPairs() {
+    const event = fixture({
+      pairs: [
+        {
+          id: "one",
+          leaderId: "a",
+          followerId: "b",
+          round: 1,
+          ageGroup: "old",
+        },
+        {
+          id: "two",
+          leaderId: "c",
+          followerId: "d",
+          round: 1,
+          ageGroup: "old",
+        },
+      ],
+    });
+    const db = setup(event);
+    db.members = [
+      ...members,
+      { ...members[0], id: "c", fullName: "Cyril" },
+      { ...members[1], id: "d", fullName: "Dana" },
+      { ...members[1], id: "f", fullName: "Františka" },
+      {
+        ...members[1],
+        id: "g",
+        fullName: "Gabriela",
+        ageGroup: "young",
+        ageGroups: ["young"],
+      },
+      { ...members[1], id: "h", fullName: "Hana" },
+      { ...members[1], id: "i", fullName: "Irena" },
+    ];
+    event.attendance = db.members.map((member) => ({
+      memberId: member.id,
+      selected: true,
+      interest: "yes",
+      status: "present",
+      standing: member.id === "i",
+    }));
+    db.preferences = [
+      {
+        id: "ban",
+        memberAId: "a",
+        memberBId: "h",
+        kind: "forbidden",
+      },
+    ];
+    return db;
+  }
+  it("opens edits from a table, offers free partners first, and releases an occupied partner's pair", async () => {
+    const user = userEvent.setup();
+    setupPairs();
+    wrap(<PairingPage canEdit />);
+    expect(
+      screen.getByRole("table", { name: "Sestava párů" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Žena v páru 1")).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Detail páru: Adam + Žofie" }),
+    );
+    const select = screen.getByLabelText("Žena v páru 1");
+    expect(
+      within(select)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual([
+      "Františka · bez páru",
+      "Žofie · současný pár",
+      "Dana · v páru s Cyril",
+    ]);
+    await user.selectOptions(select, "d");
+    await user.click(screen.getByRole("button", { name: "Hotovo" }));
+    expect(
+      screen.queryByRole("button", { name: "Detail páru: Cyril + Dana" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Vytvořit pár pro Cyril" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Vytvořit pár pro Žofie" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Uložit návrh" }));
+    expect(api.savePairs).toHaveBeenCalledWith(
+      "e",
+      [expect.objectContaining({ leaderId: "a", followerId: "d" })],
+      false,
+    );
+  });
+  it("creates a pair from an unpaired woman and allows removing it from the detail", async () => {
+    const user = userEvent.setup();
+    const db = setupPairs();
+    db.events[0].pairs = [db.events[0].pairs[0]];
+    wrap(<PairingPage canEdit />);
+    await user.click(
+      screen.getByRole("button", { name: "Vytvořit pár pro Dana" }),
+    );
+    const select = screen.getByLabelText("Partner pro Dana");
+    expect(
+      within(select)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual([
+      "Vyberte partnera",
+      "Cyril · bez páru",
+      "Adam · v páru s Žofie",
+    ]);
+    await user.selectOptions(select, "c");
+    await user.click(screen.getByRole("button", { name: "Vytvořit pár" }));
+    expect(screen.getByRole("checkbox", { name: "Pod čarou" })).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Zrušit pár" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Vytvořit pár pro Dana" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Vytvořit pár pro Irena" }),
+    ).toBeDisabled();
+  });
+  it("lets an admin save removal of the last pair as an empty draft", async () => {
+    const user = userEvent.setup();
+    const db = setupPairs();
+    db.events[0].pairs = [db.events[0].pairs[0]];
+    wrap(<PairingPage canEdit />);
+    await user.click(
+      screen.getByRole("button", { name: "Detail páru: Adam + Žofie" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Zrušit pár" }));
+    expect(
+      screen.getByRole("button", { name: "Zveřejnit schválené páry" }),
+    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Uložit návrh" }));
+    expect(api.savePairs).toHaveBeenCalledWith("e", [], false);
   });
 });
 

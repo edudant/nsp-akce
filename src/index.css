@@ -6878,7 +6878,30 @@ tbody tr:hover {
 .song-actions { display: inline-flex; gap: .3rem; }
 .song-picker { max-height: 18rem; overflow-y: auto; display: flex; flex-wrap: wrap; gap: .35rem; margin: 1rem 0; }
 .login-code { font-size: 1.5rem; letter-spacing: .2em; }
-.pair-edit-row .select-wrap { flex: 1; min-width: 130px; }
+.pairing-table th, .pairing-table td { padding: 7px 10px; font-size: .8rem; }
+.pairing-table th:first-child, .pairing-table .pairing-number { width: 32px; color: var(--muted); }
+.pairing-table .pairing-number { white-space: nowrap; }
+.pairing-table th:last-child, .pairing-table td:last-child { width: 90px; }
+.pairing-table .is-clickable { cursor: pointer; }
+.pairing-table .is-clickable:hover { background: #eaf3eb; }
+.pairing-section th { background: var(--paper-soft); text-transform: none; }
+.pairing-section--below th { border-top: 2px solid var(--border); }
+.pair-name-button { display: inline; padding: 3px 0; border: 0; background: transparent; color: var(--green-900); font: inherit; font-weight: 650; text-align: left; cursor: pointer; }
+.pair-name-button:focus-visible { outline: 2px solid var(--green-700); outline-offset: 3px; }
+.pair-name-button:disabled { color: var(--muted); cursor: default; }
+.pair-member-role { display: block; color: var(--muted); font-size: .7rem; }
+.pairing-hint { color: var(--muted); font-size: .8rem; line-height: 1.5; }
+.pair-detail { display: grid; gap: 14px; }
+.attendance-defaults { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 16px; padding: 12px; border: 1px solid var(--border); border-radius: 9px; }
+.attendance-defaults legend { padding: 0 5px; font-size: .85rem; font-weight: 650; }
+.attendance-percent-editor { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.attendance-percent-editor .field { max-width: 150px; }
+@media (max-width: 600px) {
+ .attendance-defaults { grid-template-columns: minmax(0, 1fr); }
+ .pairing-table th, .pairing-table td { padding: 6px; font-size: .75rem; overflow-wrap: anywhere; }
+ .pairing-table th:first-child, .pairing-table .pairing-number { width: 28px; }
+ .pairing-table th:last-child, .pairing-table td:last-child { width: 65px; }
+}
 .attendance-entry input[type=number] { max-width: 6rem; }
 @media (max-width: 600px) { .feature-card { padding: 1rem; } .feature-toolbar > * { max-width: 100%; } .attendance-entry > span { flex-basis: 100%; } }
 

@@ -61,6 +61,9 @@ export interface AttendanceRecord {
   note?: string;
 }
 
+export type AttendanceDefaults = Pick<AttendanceRecord, "interest" | "status"> &
+  Pick<Partial<AttendanceRecord>, "attendancePercent" | "note">;
+
 export interface ProgramCatalogItem {
   id: string;
   name: string;
@@ -279,6 +282,11 @@ export interface AppApi {
     memberId: string,
     patch: Partial<AttendanceRecord>,
   ): Promise<EnsembleEvent>;
+  addAttendanceBatch(
+    eventId: string,
+    memberIds: string[],
+    defaults: AttendanceDefaults,
+  ): Promise<void>;
   updateMyResponse(
     eventId: string,
     response: InterestStatus,

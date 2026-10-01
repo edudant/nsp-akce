@@ -301,12 +301,20 @@ try {
     );
   await admin.getByLabel("Čí přání zohlednit").selectOption("follower");
   await admin.getByRole("button", { name: "Vygenerovat návrh" }).click();
-  await admin.getByLabel("Muž v páru 1").waitFor();
-  assert.equal(await admin.getByLabel("Muž v páru 1").count(), 1);
-  assert.equal(await admin.getByLabel("Muž v páru 2").count(), 1);
-  await admin
-    .getByLabel("Žena v páru 1")
-    .selectOption(await admin.getByLabel("Žena v páru 1").inputValue());
+  const pairRows = admin
+    .getByRole("table", { name: "Sestava párů" })
+    .getByRole("button", { name: /^Detail páru:/ });
+  await pairRows.first().waitFor();
+  assert.equal(await pairRows.count(), 2);
+  await pairRows.first().click();
+  await admin.getByLabel(/Žena v páru/).waitFor();
+  const belowLine = admin
+    .getByRole("dialog")
+    .getByRole("checkbox", { name: "Pod čarou", exact: true });
+  const originallyBelow = await belowLine.isChecked();
+  await belowLine.setChecked(!originallyBelow);
+  await belowLine.setChecked(originallyBelow);
+  await admin.getByRole("button", { name: "Hotovo", exact: true }).click();
   await admin
     .getByRole("button", { name: "Uložit návrh", exact: true })
     .click();
@@ -455,7 +463,10 @@ try {
       r.url().includes("mutate_app_v3") &&
       r.request().postDataJSON()?.payload?.attendancePercent === actualPercent,
   );
-  await admin.getByLabel("Procento účasti " + own.fullName).press("Tab");
+  await admin
+    .getByRole("dialog")
+    .getByRole("button", { name: "Uložit procenta", exact: true })
+    .click();
   assert.equal((await percentSaved).status(), 200);
   await admin.waitForFunction(
     () =>
@@ -511,7 +522,11 @@ try {
     true,
   );
   await admin.getByRole("button", { name: "Vygenerovat návrh" }).click();
-  await admin.getByLabel("Muž v páru 1").waitFor();
+  await admin
+    .getByRole("table", { name: "Sestava párů" })
+    .getByRole("button", { name: /^Detail páru:/ })
+    .first()
+    .waitFor();
   await admin.getByRole("button", { name: "Uložit a zveřejnit sadu" }).click();
   await admin.getByText("Páry jsou zveřejněné.", { exact: true }).waitFor();
   await go(
@@ -700,7 +715,11 @@ try {
     await admin.getByText(/Páruje se podle zapsané skutečné účasti/).waitFor();
     await admin.getByRole("button", { name: "Vygenerovat návrh" }).click();
     await admin.getByText(/Návrh vytvořen: 1 hlavních párů/).waitFor();
-    await admin.getByLabel("Muž v páru 1").waitFor();
+    await admin
+      .getByRole("table", { name: "Sestava párů" })
+      .getByRole("button", { name: /^Detail páru:/ })
+      .first()
+      .waitFor();
     await admin
       .getByRole("button", { name: "Uložit a zveřejnit sadu" })
       .click();

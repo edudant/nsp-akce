@@ -174,6 +174,14 @@ export const appApiV3: AppApi = {
     await mutate("attendance", { ...patch, id, memberId });
     return eventById(id);
   },
+  async addAttendanceBatch(eventId, memberIds, defaults) {
+    const { error } = await requireSupabase().rpc("add_attendance_batch_v4", {
+      target_event_id: eventId,
+      member_ids: memberIds,
+      defaults,
+    });
+    if (error) throw error;
+  },
   async updateAllAttendance(id, status) {
     const event = await eventById(id);
     for (const record of event.attendance)

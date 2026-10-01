@@ -18,3 +18,4 @@ done
 docker exec "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "grant all on all tables in schema public to service_role; grant all on all functions in schema public to service_role; notify pgrst, 'reload schema';" >/dev/null
 
 docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$root/supabase/tests/feature_legacy_migration_test.sql"
+docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$root/supabase/tests/bulk_attendance_test.sql"
