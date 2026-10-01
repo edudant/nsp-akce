@@ -268,6 +268,7 @@ export function ScoresPage() {
               <option value="all">Všechny role</option>
               <option value="leader">Tanečníci</option>
               <option value="follower">Tanečnice</option>
+              <option value="musician">Muzikanti</option>
             </Select>
             <Select
               aria-label="Řadit tabulku"

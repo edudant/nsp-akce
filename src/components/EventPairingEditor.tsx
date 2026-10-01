@@ -4,7 +4,7 @@ import { appApi } from "../lib/dataApi";
 import { databaseQueryKey } from "./DataContext";
 import { Button, Select } from "./Ui";
 import { Help } from "./Help";
-import { formatDate, todayInPrague } from "./formatters";
+import { formatSetName } from "./formatters";
 import {
   pairingParticipants,
   defaultTuning,
@@ -20,26 +20,29 @@ export function EventPairingEditor({
   admin,
   onSaved,
   initialName,
+  setId,
 }: {
   db: AppDatabase;
   event: EnsembleEvent;
   admin: boolean;
   onSaved?: () => void;
   initialName?: string;
+  setId?: string;
 }) {
   const query = useQueryClient();
   const [tuning, setTuning] = useState(defaultTuning);
   const [draft, setDraft] = useState<DancePair[] | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
-  const [name, setName] = useState(
-    initialName ?? formatDate(todayInPrague(), "d. M. yyyy"),
-  );
+  const [name, setName] = useState(initialName ?? formatSetName());
   const [message, setMessage] = useState("");
   const pairs = draft ?? event.pairs;
-  const error = validatePairs(db, event, pairs);
+  const error =
+    setId && JSON.stringify(pairs) === JSON.stringify(event.pairs)
+      ? null
+      : validatePairs(db, event, pairs);
   const save = useMutation({
     mutationFn: (published: boolean) =>
-      appApi.savePairs(event.id, pairs, published, [], name),
+      appApi.savePairs(event.id, pairs, published, [], name, setId),
     onSuccess: async (_, published) => {
       await query.invalidateQueries({ queryKey: databaseQueryKey });
       setDraft(null);
@@ -239,14 +242,14 @@ export function EventPairingEditor({
             maxLength={120}
             value={name}
             disabled={pending}
-            placeholder={formatDate(todayInPrague(), "d. M. yyyy")}
+            placeholder={formatSetName()}
             onChange={(e) => setName(e.target.value)}
           />
         </label>
         <Button
           disabled={
             !!error ||
-            (pairs.length === 0 && selected.length === 0) ||
+            (pairs.length === 0 && selected.length === 0 && !setId) ||
             generate.isPending ||
             selection.isPending
           }

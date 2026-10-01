@@ -30,6 +30,7 @@ import {
   formatDate,
   formatAuditTime,
   formatSetDate,
+  formatSetName,
 } from "../components/formatters";
 import { ResponseBadge } from "../components/Participation";
 import { canRespondToEvent, eventHasStarted } from "../lib/memberPortal";
@@ -273,55 +274,58 @@ function EventContent({
               }
               {myRecord.note && !canRespond && <p>{myRecord.note}</p>}
               {!canRespond && <p>Odpovědi jsou uzamčené. Změnu zadá admin.</p>}
-              {member && event.type === "performance" && dance && (
-                <>
-                  <details className="partner-wishes">
-                    <summary>Vybrat přání partnerů</summary>
-                    <InfoHelp label="Pravidla přání partnerů">
-                      <p>
-                        Vyberte kompatibilní partnery: opačnou roli a společné
-                        zařazení. Přání je doporučení pro generátor; jeho
-                        splnění může bránit zákaz dvojice, jiná přání nebo
-                        nedostatek partnerů. Vyšší body mohou zvýšit váhu vašeho
-                        přání.
-                      </p>
-                    </InfoHelp>
-                    <div className="standing-picker">
-                      {db.members
-                        .filter(
-                          (m) =>
-                            m.active &&
-                            compatibleMembers(member, m) &&
-                            (event.partnerOptions?.includes(m.id) ?? true),
-                        )
-                        .map((m) => (
-                          <label key={m.id}>
-                            <input
-                              type="checkbox"
-                              disabled={!canRespond}
-                              checked={wishes.includes(m.id)}
-                              onChange={(e) =>
-                                setWishes(
-                                  e.target.checked
-                                    ? [...wishes, m.id]
-                                    : wishes.filter((id) => id !== m.id),
-                                )
-                              }
-                            />
-                            {m.fullName}
-                          </label>
-                        ))}
-                    </div>
-                    <Button
-                      disabled={!canRespond}
-                      loading={saveWishes.isPending}
-                      onClick={() => saveWishes.mutate()}
-                    >
-                      Uložit přání
-                    </Button>
-                  </details>
-                </>
-              )}
+              {member &&
+                member.role !== "musician" &&
+                event.type === "performance" &&
+                dance && (
+                  <>
+                    <details className="partner-wishes">
+                      <summary>Vybrat přání partnerů</summary>
+                      <InfoHelp label="Pravidla přání partnerů">
+                        <p>
+                          Vyberte kompatibilní partnery: opačnou roli a společné
+                          zařazení. Přání je doporučení pro generátor; jeho
+                          splnění může bránit zákaz dvojice, jiná přání nebo
+                          nedostatek partnerů. Vyšší body mohou zvýšit váhu
+                          vašeho přání.
+                        </p>
+                      </InfoHelp>
+                      <div className="standing-picker">
+                        {db.members
+                          .filter(
+                            (m) =>
+                              m.active &&
+                              compatibleMembers(member, m) &&
+                              (event.partnerOptions?.includes(m.id) ?? true),
+                          )
+                          .map((m) => (
+                            <label key={m.id}>
+                              <input
+                                type="checkbox"
+                                disabled={!canRespond}
+                                checked={wishes.includes(m.id)}
+                                onChange={(e) =>
+                                  setWishes(
+                                    e.target.checked
+                                      ? [...wishes, m.id]
+                                      : wishes.filter((id) => id !== m.id),
+                                  )
+                                }
+                              />
+                              {m.fullName}
+                            </label>
+                          ))}
+                      </div>
+                      <Button
+                        disabled={!canRespond}
+                        loading={saveWishes.isPending}
+                        onClick={() => saveWishes.mutate()}
+                      >
+                        Uložit přání
+                      </Button>
+                    </details>
+                  </>
+                )}
             </Card>
           )}
           {!myRecord && (
@@ -435,13 +439,15 @@ function EventContent({
             {selectedPairSet ? (
               <>
                 {selectedPairSet.name !==
-                  formatSetDate(selectedPairSet.createdAt) && (
-                  <p>
-                    <time dateTime={selectedPairSet.createdAt}>
-                      {formatSetDate(selectedPairSet.createdAt)}
-                    </time>
-                  </p>
-                )}
+                  formatSetDate(selectedPairSet.createdAt) &&
+                  selectedPairSet.name !==
+                    formatSetName(selectedPairSet.createdAt) && (
+                    <p>
+                      <time dateTime={selectedPairSet.createdAt}>
+                        {formatSetDate(selectedPairSet.createdAt)}
+                      </time>
+                    </p>
+                  )}
                 <PairingRoster
                   db={db}
                   event={event}
@@ -471,10 +477,15 @@ function EventContent({
                     pairs: selectedPairSet?.pairs ?? event.pairs,
                   }}
                   initialName={editingSet ? selectedPairSet?.name : undefined}
+                  setId={
+                    editingSet && selectedPairSet?.id !== "legacy"
+                      ? selectedPairSet?.id
+                      : undefined
+                  }
                   admin
                   onSaved={() => {
                     setPairing(false);
-                    setPairSetId("");
+                    setPairSetId(editingSet ? (selectedPairSet?.id ?? "") : "");
                   }}
                 />
               )}

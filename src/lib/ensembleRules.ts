@@ -5,6 +5,8 @@ export function memberGroups(member: Member): AgeGroup[] {
 }
 export function compatibleMembers(a: Member, b: Member): boolean {
   return (
+    a.role !== "musician" &&
+    b.role !== "musician" &&
     a.id !== b.id &&
     a.role !== b.role &&
     memberGroups(a).some((group) => memberGroups(b).includes(group))

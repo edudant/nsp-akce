@@ -31,21 +31,23 @@ export function PairingRoster({
   const [newMemberId, setNewMemberId] = useState<string | null>(null);
   const [partnerId, setPartnerId] = useState("");
   const selected: Member[] = roster
-    ? roster.map((entry) => {
-        const member = db.members.find((m) => m.id === entry.memberId);
-        return {
-          shortName: "",
-          active: false,
-          experience: "beginner",
-          joinedAt: "",
-          ...member,
-          id: entry.memberId,
-          fullName: entry.fullName ?? member?.fullName ?? "Neznámý člen",
-          role: entry.role ?? member?.role ?? "leader",
-          ageGroups: entry.ageGroups ?? member?.ageGroups,
-          ageGroup: entry.ageGroups?.[0] ?? member?.ageGroup ?? null,
-        };
-      })
+    ? roster
+        .filter((entry) => entry.role !== "musician")
+        .map((entry) => {
+          const member = db.members.find((m) => m.id === entry.memberId);
+          return {
+            shortName: "",
+            active: false,
+            experience: "beginner",
+            joinedAt: "",
+            ...member,
+            id: entry.memberId,
+            fullName: entry.fullName ?? member?.fullName ?? "Neznámý člen",
+            role: entry.role ?? member?.role ?? "leader",
+            ageGroups: entry.ageGroups ?? member?.ageGroups,
+            ageGroup: entry.ageGroups?.[0] ?? member?.ageGroup ?? null,
+          };
+        })
     : pairingParticipants(db, event);
   const used = new Set(
     pairs.flatMap((pair) => [pair.leaderId, pair.followerId]),

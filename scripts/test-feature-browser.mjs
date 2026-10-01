@@ -320,11 +320,12 @@ try {
   );
   await go(admin, route, title);
   await admin.getByRole("tab", { name: "Písně", exact: true }).click();
-  await admin.getByRole("button", { name: "Přidat písně" }).click();
+  await admin.getByRole("button", { name: "Přidat sérii" }).click();
   await admin.getByLabel("Název série", { exact: true }).fill("Browser songs");
   await admin
     .getByRole("checkbox", { name: "Bul jest jeren sedlák", exact: true })
-    .check();
+    .locator("..")
+    .click();
   await admin.getByRole("button", { name: "Přidat vybrané (1)" }).click();
   await admin.getByRole("dialog").waitFor({ state: "hidden" });
   await member.reload();
@@ -338,7 +339,7 @@ try {
     0,
   );
   await admin
-    .getByRole("button", { name: "Detail: Bul jest jeren sedlák", exact: true })
+    .getByRole("button", { name: "Upravit sérii Browser songs", exact: true })
     .click();
   await admin.getByRole("button", { name: "Potvrdit sérii" }).click();
   await admin.getByRole("dialog").waitFor({ state: "hidden" });

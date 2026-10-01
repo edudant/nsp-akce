@@ -59,3 +59,7 @@ export function formatSetDate(at: string) {
     year: "numeric",
   }).format(new Date(at));
 }
+
+export function formatSetName(at = new Date().toISOString()) {
+  return `${formatSetDate(at)} ${new Intl.DateTimeFormat("cs-CZ", { timeZone: "Europe/Prague", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(at))}`;
+}

@@ -16,7 +16,6 @@ import { Dialog } from "./Ui";
 import { EventDetailPage } from "../pages/EventDetailPage";
 import { EventPairingEditor } from "./EventPairingEditor";
 import { EventProgramEditor } from "./EventProgramEditor";
-import { formatDate, todayInPrague } from "./formatters";
 import { EventsPage } from "../pages/EventsPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { EventForm } from "./EventForm";
@@ -161,9 +160,9 @@ describe("feature UI flows", () => {
     expect(
       screen.getByRole("button", { name: "Vygenerovat návrh" }),
     ).toBeVisible();
-    expect(screen.getByLabelText("Název sady")).toHaveValue(
-      formatDate(todayInPrague(), "d. M. yyyy"),
-    );
+    expect(
+      (screen.getByLabelText("Název sady") as HTMLInputElement).value,
+    ).toMatch(/^\d{1,2}\. \d{1,2}\. \d{4} \d{2}:\d{2}$/);
   });
   it("edits a selected performance set in a dialog and Escape closes only pair detail", async () => {
     const pair = {
@@ -261,6 +260,98 @@ describe("feature UI flows", () => {
     expect(save).toHaveBeenLastCalledWith(
       expect.objectContaining({ responseDeadline: "2026-10-01T16:00:00.000Z" }),
     );
+  });
+  it("renames an existing saved set by ID even after attendance changes", async () => {
+    const e = fixture({
+      pairs: [
+        {
+          id: "pair",
+          leaderId: "a",
+          followerId: "b",
+          round: 1,
+          ageGroup: "old",
+        },
+      ],
+      attendance: [],
+    });
+    const db = setup(e);
+    api.savePairs.mockResolvedValue(e);
+    wrap(
+      <EventPairingEditor
+        db={db}
+        event={e}
+        admin
+        setId="saved-set"
+        initialName="Původní"
+      />,
+    );
+    const user = userEvent.setup();
+    await user.clear(screen.getByLabelText("Název sady"));
+    await user.type(screen.getByLabelText("Název sady"), "Nový název");
+    await user.click(screen.getByRole("button", { name: "Uložit" }));
+    expect(api.savePairs).toHaveBeenCalledExactlyOnceWith(
+      "e",
+      e.pairs,
+      true,
+      [],
+      "Nový název",
+      "saved-set",
+    );
+  });
+  it("lets a musician report attendance without partner wishes", async () => {
+    const db = setup(fixture({ attendanceScope: "self" }));
+    db.members = [{ ...members[0], role: "musician" }, members[1]];
+    db.accessMode = "member";
+    db.myMemberId = "a";
+    wrap(
+      <EventDetailPage
+        eventId="e"
+        canAdmin={false}
+        canEdit={false}
+        canPair={false}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("radio", { name: "Přijdu" }));
+    await user.click(screen.getByRole("button", { name: "Uložit odpověď" }));
+    expect(api.updateMyResponse).toHaveBeenCalledWith("e", "yes", "");
+    expect(screen.queryByText("Vybrat přání partnerů")).not.toBeInTheDocument();
+  });
+  it("shows each series separately and saves keyboard ordering without unconfirming it", async () => {
+    const e = fixture({
+      songSeries: [
+        { id: "s1", name: "První série", songIds: ["1", "2"], confirmed: true },
+        { id: "s2", name: "Druhá série", songIds: [], confirmed: false },
+      ],
+    });
+    const db = setup(e);
+    wrap(<SongSeriesPanel db={db} event={e} admin />);
+    expect(screen.getByRole("heading", { name: "První série" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Druhá série" })).toBeVisible();
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "Upravit sérii První série" }),
+    );
+    expect(
+      within(screen.getByRole("dialog")).queryByRole("checkbox", {
+        name: "Píseň jedna",
+      }),
+    ).not.toBeInTheDocument();
+    const handle = screen.getByRole("button", {
+      name: "Přetáhnout Píseň jedna",
+    });
+    handle.focus();
+    await user.keyboard("{ArrowDown}");
+    expect(
+      screen.queryByRole("button", { name: "Posunout píseň nahoru" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Uložit sérii" }));
+    expect(api.saveSongSeries).toHaveBeenCalledExactlyOnceWith("e", {
+      id: "s1",
+      name: "První série",
+      songIds: ["2", "1"],
+      confirmed: true,
+    });
   });
   it("shows an explicit empty generation result and the corrective action", async () => {
     setup(fixture({ status: "closed" }));
@@ -456,7 +547,7 @@ describe("feature UI flows", () => {
     });
     const db = setup(e);
     wrap(<SongSeriesPanel db={db} event={e} admin />);
-    await user.click(screen.getByRole("button", { name: "Detail: Dvě" }));
+    await user.click(screen.getByRole("button", { name: "Upravit sérii Dvě" }));
     const dialog = screen.getByRole("dialog");
     expect(
       within(dialog).queryByRole("checkbox", { name: "Píseň jedna" }),
@@ -734,7 +825,8 @@ describe("compact pair management", () => {
       [expect.objectContaining({ leaderId: "a", followerId: "d" })],
       true,
       [],
-      formatDate(todayInPrague(), "d. M. yyyy"),
+      expect.stringMatching(/\d{1,2}\. \d{1,2}\. \d{4} \d{2}:\d{2}/),
+      undefined,
     );
   });
   it("creates a pair from an unpaired woman and allows removing it from the detail", async () => {
@@ -794,7 +886,8 @@ describe("compact pair management", () => {
       [],
       true,
       [],
-      formatDate(todayInPrague(), "d. M. yyyy"),
+      expect.stringMatching(/\d{1,2}\. \d{1,2}\. \d{4} \d{2}:\d{2}/),
+      undefined,
     );
   });
 });
@@ -1125,7 +1218,7 @@ describe("event list and saved roster flows", () => {
     const db = setup();
     wrap(<SongSeriesPanel db={db} event={db.events[0]} admin />);
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Přidat písně" }));
+    await user.click(screen.getByRole("button", { name: "Přidat sérii" }));
     await user.click(screen.getByRole("checkbox", { name: "Píseň jedna" }));
     await user.click(screen.getByRole("checkbox", { name: "Píseň dvě" }));
     await user.click(

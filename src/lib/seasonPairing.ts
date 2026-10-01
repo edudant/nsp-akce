@@ -28,17 +28,19 @@ export function pairingParticipants(
   db: AppDatabase,
   event: EnsembleEvent,
 ): Member[] {
-  return db.members.filter((m) =>
-    event.attendance.some(
-      (r) =>
-        r.memberId === m.id &&
-        (event.status === "closed"
-          ? r.status === "present" || r.status === "partial"
-          : m.active &&
-            r.selected &&
-            r.status !== "absent" &&
-            r.status !== "excused"),
-    ),
+  return db.members.filter(
+    (m) =>
+      m.role !== "musician" &&
+      event.attendance.some(
+        (r) =>
+          r.memberId === m.id &&
+          (event.status === "closed"
+            ? r.status === "present" || r.status === "partial"
+            : m.active &&
+              r.selected &&
+              r.status !== "absent" &&
+              r.status !== "excused"),
+      ),
   );
 }
 

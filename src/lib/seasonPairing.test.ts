@@ -518,6 +518,26 @@ describe("season pairing", () => {
       baseline.pairs,
     );
   });
+  it("excludes musicians from generation, standing and manual candidates", () => {
+    const ms = [
+      member("a", "leader"),
+      member("b", "follower"),
+      member("music", "musician"),
+    ];
+    for (const status of ["confirmed", "closed"] as const) {
+      const e = event(ms, { status }),
+        db = database(ms, e);
+      expect(pairingParticipants(db, e).map((m) => m.id)).toEqual(["a", "b"]);
+      const result = generateSeasonPairs(db, e, defaultTuning, "test");
+      expect(result.pairs).toHaveLength(1);
+      expect(result.standingIds).not.toContain("music");
+      expect(compatibleMembers(ms[2], ms[0])).toBe(false);
+      expect(compatibleMembers(ms[2], ms[1])).toBe(false);
+      expect(
+        validatePairs(db, e, [{ ...result.pairs[0], leaderId: "music" }]),
+      ).toContain("role");
+    }
+  });
   it("rejects duplicate members, forbidden manual pairs and incompatible groups", () => {
     const ms = [member("a", "leader"), member("b", "follower")];
     const e = event(ms);

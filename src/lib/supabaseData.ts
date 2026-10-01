@@ -30,7 +30,7 @@ interface MemberRow {
   id: string;
   display_name: string;
   short_name: string;
-  pairing_role: "lead" | "follow";
+  pairing_role: "lead" | "follow" | "musician";
   experience_level: ExperienceLevel;
   age_group: AgeGroup | null;
   active_from: string | null;
@@ -177,7 +177,7 @@ interface ScoreViewRow {
 interface SharedScore {
   memberId: string;
   displayName: string;
-  pairingRole: "lead" | "follow";
+  pairingRole: "lead" | "follow" | "musician";
   totalPoints: number | string;
   rehearsalPoints: number | string;
   performancePoints: number | string;
@@ -259,7 +259,7 @@ interface MemberHome {
     memberId: string;
     displayName: string;
     shortName: string;
-    pairingRole: "lead" | "follow";
+    pairingRole: "lead" | "follow" | "musician";
     experienceLevel: ExperienceLevel;
   };
   score: LeaderboardScore;
@@ -271,7 +271,7 @@ interface LeaderboardScore {
   memberId: string;
   displayName: string;
   shortName?: string;
-  pairingRole: "lead" | "follow";
+  pairingRole: "lead" | "follow" | "musician";
   totalPoints: number | string;
   possiblePoints: number | string;
   rehearsalPoints: number | string;
@@ -318,8 +318,12 @@ function numberValue(value: number | string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function pairingRole(value: "lead" | "follow"): PairingRole {
-  return value === "lead" ? "leader" : "follower";
+function pairingRole(value: "lead" | "follow" | "musician"): PairingRole {
+  return value === "musician"
+    ? "musician"
+    : value === "lead"
+      ? "leader"
+      : "follower";
 }
 
 function attendanceStatus(
@@ -449,9 +453,10 @@ export function pragueLocalToIso(date: string, time: string): string {
   const match = offsetName?.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
   const direction = match?.[1] === "-" ? -1 : 1;
   const offsetMinutes =
-    direction *
-    (Number(match?.[2] ?? 0) * 60 + Number(match?.[3] ?? 0));
-  return new Date(approximation.getTime() - offsetMinutes * 60_000).toISOString();
+    direction * (Number(match?.[2] ?? 0) * 60 + Number(match?.[3] ?? 0));
+  return new Date(
+    approximation.getTime() - offsetMinutes * 60_000,
+  ).toISOString();
 }
 
 function eventPrograms(
@@ -485,12 +490,10 @@ function chosenRunForEvent(
     .filter((run) => run.event_id === event.id)
     .sort((first, second) => {
       const firstHasActual = pairs.some(
-        (pair) =>
-          pair.pairing_run_id === first.id && pair.is_confirmed_actual,
+        (pair) => pair.pairing_run_id === first.id && pair.is_confirmed_actual,
       );
       const secondHasActual = pairs.some(
-        (pair) =>
-          pair.pairing_run_id === second.id && pair.is_confirmed_actual,
+        (pair) => pair.pairing_run_id === second.id && pair.is_confirmed_actual,
       );
       if (event.status === "closed" && firstHasActual !== secondHasActual) {
         return firstHasActual ? -1 : 1;
@@ -543,25 +546,24 @@ function eventFromRows(
   const eventAttendance = attendanceRows.filter(
     (item) => item.event_id === row.id,
   );
-  const eventResponses = responseRows.filter((item) => item.event_id === row.id);
+  const eventResponses = responseRows.filter(
+    (item) => item.event_id === row.id,
+  );
   const eventParticipants = participantRows.filter(
     (item) => item.event_id === row.id,
   );
   const programs = eventPrograms(row.id, eventProgramRows, catalogRows);
   const chosenRun = chosenRunForEvent(row, runs, pairRows);
   const blocks = chosenRun
-    ? runPairingBlocks(
-        chosenRun.id,
-        programs,
-        blockRows,
-        blockProgramRows,
-      )
+    ? runPairingBlocks(chosenRun.id, programs, blockRows, blockProgramRows)
     : [];
   const pairs: DancePair[] = chosenRun
     ? pairRows
         .filter((pair) => pair.pairing_run_id === chosenRun.id)
         .map((pair) => {
-          const block = blocks.find((item) => item.id === pair.pairing_block_id);
+          const block = blocks.find(
+            (item) => item.id === pair.pairing_block_id,
+          );
           return {
             id: pair.id,
             leaderId: pair.member_a_id,
@@ -748,9 +750,11 @@ async function getAdminDatabase(): Promise<AppDatabase> {
   const runs = (runsResult.data ?? []) as PairingRunRow[];
   const pairs = (pairsResult.data ?? []) as EventPairRow[];
   const catalogRows = (catalogResult.data ?? []) as ProgramCatalogRow[];
-  const eventProgramRows = (eventProgramsResult.data ?? []) as EventProgramRow[];
+  const eventProgramRows = (eventProgramsResult.data ??
+    []) as EventProgramRow[];
   const blockRows = (blocksResult.data ?? []) as PairingBlockRow[];
-  const blockProgramRows = (blockProgramsResult.data ?? []) as PairingBlockProgramRow[];
+  const blockProgramRows = (blockProgramsResult.data ??
+    []) as PairingBlockProgramRow[];
   const currentSeasonId = (
     (seasonsResult.data ?? [])[0] as { id?: string } | undefined
   )?.id;
@@ -784,11 +788,13 @@ async function getAdminDatabase(): Promise<AppDatabase> {
       strength: preference.strength,
       privateReason: preference.private_reason ?? undefined,
     })),
-    partnerWishes: wishRows.map((wish): PartnerWish => ({
-      eventId: wish.event_id,
-      memberId: wish.member_id,
-      partnerId: wish.partner_member_id,
-    })),
+    partnerWishes: wishRows.map(
+      (wish): PartnerWish => ({
+        eventId: wish.event_id,
+        memberId: wish.member_id,
+        partnerId: wish.partner_member_id,
+      }),
+    ),
     programCatalog: catalogRows.map(programFromRow),
     scoreRows: scoreRows
       .map((score): ScoreRow | null => {
@@ -884,10 +890,7 @@ function memberEvent(
   };
 }
 
-function memberScoreRow(
-  score: LeaderboardScore,
-  member: Member,
-): ScoreRow {
+function memberScoreRow(score: LeaderboardScore, member: Member): ScoreRow {
   const total = numberValue(score.totalPoints);
   const possible = numberValue(score.possiblePoints);
   return {
@@ -965,19 +968,23 @@ async function getMemberDatabase(): Promise<AppDatabase> {
       joinedAt: "",
     });
   }
-  const eventDetails = (eventDetailsResult.data ?? []) as MemberEventDetailRow[];
-  const ownAttendance = (ownAttendanceResult.data ?? []) as MemberAttendanceDetailRow[];
+  const eventDetails = (eventDetailsResult.data ??
+    []) as MemberEventDetailRow[];
+  const ownAttendance = (ownAttendanceResult.data ??
+    []) as MemberAttendanceDetailRow[];
   const events = (home.events ?? []).map((event) => {
     const eventRow = eventDetails.find((row) => row.id === event.id);
     const attendanceRow = ownAttendance.find(
-      (row) => row.event_id === event.id && row.member_id === home.member.memberId,
+      (row) =>
+        row.event_id === event.id && row.member_id === home.member.memberId,
     );
     return memberEvent(event, home.member.memberId, eventRow, attendanceRow);
   });
   const runs = (runsResult.data ?? []) as PairingRunRow[];
   const pairs = (pairsResult.data ?? []) as EventPairRow[];
   const blockRows = (blocksResult.data ?? []) as PairingBlockRow[];
-  const blockProgramRows = (blockProgramsResult.data ?? []) as PairingBlockProgramRow[];
+  const blockProgramRows = (blockProgramsResult.data ??
+    []) as PairingBlockProgramRow[];
 
   for (const event of events) {
     const run = runs
@@ -1179,12 +1186,14 @@ async function getEvent(id: string): Promise<EnsembleEvent | null> {
     ).values(),
   )
     .sort((first, second) => first.position - second.position)
-    .map((program): EventProgramItem => ({
-      id: program.id,
-      name: program.name,
-      custom: false,
-      sortOrder: program.position,
-    }));
+    .map(
+      (program): EventProgramItem => ({
+        id: program.id,
+        name: program.name,
+        custom: false,
+        sortOrder: program.position,
+      }),
+    );
   return {
     ...event,
     program: programs.map((program) => program.name).join(", ") || undefined,
@@ -1219,7 +1228,20 @@ async function cleanupPairingRun(runId: string): Promise<void> {
   await requireSupabase().from("pairing_runs").delete().eq("id", runId);
 }
 
-export const supabaseApi: Omit<AppApi, "setPartnerWishes" | "saveSeason" | "getScores" | "saveSong" | "saveSongCategory" | "saveSongSeries" | "deleteSongSeries" | "updateEvent" | "generateMemberLoginCode" | "getEventAudit" | "addAttendanceBatch"> = {
+export const supabaseApi: Omit<
+  AppApi,
+  | "setPartnerWishes"
+  | "saveSeason"
+  | "getScores"
+  | "saveSong"
+  | "saveSongCategory"
+  | "saveSongSeries"
+  | "deleteSongSeries"
+  | "updateEvent"
+  | "generateMemberLoginCode"
+  | "getEventAudit"
+  | "addAttendanceBatch"
+> = {
   getDatabase,
 
   async getMembers() {
@@ -1247,23 +1269,19 @@ export const supabaseApi: Omit<AppApi, "setPartnerWishes" | "saveSeason" | "getS
 
   async updateAttendance(eventId, memberId, patch) {
     await requireAdmin();
-    const { error } = await requireSupabase().rpc(
-      "update_event_member_state",
-      {
-        target_event_id: eventId,
-        target_member_id: memberId,
-        new_attendance_status: patch.status
-          ? databaseAttendanceStatus(patch.status)
-          : null,
-        set_minutes: "attendedMinutes" in patch,
-        new_minutes_present: patch.attendedMinutes ?? null,
-        new_response: patch.interest
-          ? databaseInterestStatus(patch.interest)
-          : null,
-        new_selected:
-          typeof patch.selected === "boolean" ? patch.selected : null,
-      },
-    );
+    const { error } = await requireSupabase().rpc("update_event_member_state", {
+      target_event_id: eventId,
+      target_member_id: memberId,
+      new_attendance_status: patch.status
+        ? databaseAttendanceStatus(patch.status)
+        : null,
+      set_minutes: "attendedMinutes" in patch,
+      new_minutes_present: patch.attendedMinutes ?? null,
+      new_response: patch.interest
+        ? databaseInterestStatus(patch.interest)
+        : null,
+      new_selected: typeof patch.selected === "boolean" ? patch.selected : null,
+    });
     if (error) throw error;
     const event = await getEvent(eventId);
     if (!event) throw new Error("Událost nebyla nalezena.");
@@ -1503,10 +1521,7 @@ export const supabaseApi: Omit<AppApi, "setPartnerWishes" | "saveSeason" | "getS
 
   async addPreference(input) {
     await requireAdmin();
-    const [memberAId, memberBId] = [
-      input.memberAId,
-      input.memberBId,
-    ].sort();
+    const [memberAId, memberBId] = [input.memberAId, input.memberBId].sort();
     const { data, error } = await requireSupabase()
       .from("pairing_preferences")
       .upsert(
@@ -1550,7 +1565,12 @@ export const supabaseApi: Omit<AppApi, "setPartnerWishes" | "saveSeason" | "getS
     if ("fullName" in patch) databasePatch.display_name = patch.fullName;
     if ("shortName" in patch) databasePatch.short_name = patch.shortName;
     if ("role" in patch) {
-      databasePatch.pairing_role = patch.role === "leader" ? "lead" : "follow";
+      databasePatch.pairing_role =
+        patch.role === "musician"
+          ? "musician"
+          : patch.role === "leader"
+            ? "lead"
+            : "follow";
     }
     if ("experience" in patch) {
       databasePatch.experience_level = patch.experience;
@@ -1559,35 +1579,34 @@ export const supabaseApi: Omit<AppApi, "setPartnerWishes" | "saveSeason" | "getS
     if ("active" in patch) databasePatch.is_active = patch.active;
     if ("joinedAt" in patch) databasePatch.active_from = patch.joinedAt || null;
     if ("note" in patch) databasePatch.admin_note = patch.note ?? null;
-    const { data, error } = await requireSupabase().rpc(
-      "save_member_profile",
-      {
-        target_member_id: memberId,
-        member_patch: databasePatch,
-      },
-    );
+    const { data, error } = await requireSupabase().rpc("save_member_profile", {
+      target_member_id: memberId,
+      member_patch: databasePatch,
+    });
     if (error) throw error;
     return memberFromRow(data as MemberRow);
   },
 
   async addMember(input) {
     await requireAdmin();
-    const { data, error } = await requireSupabase().rpc(
-      "save_member_profile",
-      {
-        target_member_id: null,
-        member_patch: {
-          display_name: input.fullName,
-          short_name: input.shortName,
-          pairing_role: input.role === "leader" ? "lead" : "follow",
-          experience_level: input.experience,
-          age_group: input.ageGroup,
-          is_active: input.active,
-          active_from: input.joinedAt || null,
-          admin_note: input.note ?? null,
-        },
+    const { data, error } = await requireSupabase().rpc("save_member_profile", {
+      target_member_id: null,
+      member_patch: {
+        display_name: input.fullName,
+        short_name: input.shortName,
+        pairing_role:
+          input.role === "musician"
+            ? "musician"
+            : input.role === "leader"
+              ? "lead"
+              : "follow",
+        experience_level: input.experience,
+        age_group: input.ageGroup,
+        is_active: input.active,
+        active_from: input.joinedAt || null,
+        admin_note: input.note ?? null,
       },
-    );
+    });
     if (error) throw error;
     return memberFromRow(data as MemberRow);
   },
@@ -1630,11 +1649,14 @@ export const supabaseApi: Omit<AppApi, "setPartnerWishes" | "saveSeason" | "getS
     const row = ((accounts.data ?? []) as MemberAccountRow[]).find(
       (account) => account.member_id === memberId,
     );
-    if (!row) throw new Error("Účet se po odeslání pozvánky nepodařilo načíst.");
-    return accountFromRow(row) ?? {
-      memberId,
-      role: "member",
-    };
+    if (!row)
+      throw new Error("Účet se po odeslání pozvánky nepodařilo načíst.");
+    return (
+      accountFromRow(row) ?? {
+        memberId,
+        role: "member",
+      }
+    );
   },
 
   async setMyPartnerWishes(eventId, partnerIds) {
@@ -1660,7 +1682,11 @@ export const supabaseApi: Omit<AppApi, "setPartnerWishes" | "saveSeason" | "getS
           .eq("id", item.id)
           .select("*")
           .single()
-      : await client.from("program_catalog").insert(payload).select("*").single();
+      : await client
+          .from("program_catalog")
+          .insert(payload)
+          .select("*")
+          .single();
     if (result.error) throw result.error;
     return programFromRow(result.data as ProgramCatalogRow);
   },

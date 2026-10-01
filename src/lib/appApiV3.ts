@@ -198,14 +198,22 @@ export const appApiV3: AppApi = {
   async setMyPartnerWishes(id, partnerIds) {
     await mutate("wishes", { id, partnerIds });
   },
-  async savePairs(id, pairs, published = false, _blocks = [], name) {
+  async savePairs(id, pairs, published = false, _blocks = [], name, setId) {
     if (_blocks.length) throw new Error("Páry se ukládají pro celou akci.");
-    const { error } = await requireSupabase().rpc("save_pairs_v3", {
-      event_id: id,
-      pairs,
-      published,
-      set_name: name?.trim() || null,
-    });
+    const { error } = setId
+      ? await requireSupabase().rpc("update_pair_set_v7", {
+          target_event_id: id,
+          target_set_id: setId,
+          pairs,
+          published,
+          set_name: name?.trim() || null,
+        })
+      : await requireSupabase().rpc("save_pairs_v3", {
+          event_id: id,
+          pairs,
+          published,
+          set_name: name?.trim() || null,
+        });
     if (error) throw error;
     return eventById(id);
   },
@@ -230,7 +238,11 @@ export const appApiV3: AppApi = {
   },
   async saveSong(input) {
     const { error } = await requireSupabase().rpc("save_repertoire_song", {
-      song: { ...input, kind: input.kind ?? "song", categoryId: input.categoryId ?? null },
+      song: {
+        ...input,
+        kind: input.kind ?? "song",
+        categoryId: input.categoryId ?? null,
+      },
     });
     if (error) throw error;
   },

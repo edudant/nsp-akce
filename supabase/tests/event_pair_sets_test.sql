@@ -53,7 +53,7 @@ do $$ declare run_id uuid; saved jsonb; title text; before_count bigint; begin
  run_id:=public.save_pairs_v3((select event_id from set_case),'[]',true,'  ');
  select s into saved from jsonb_array_elements((select e->'pairSets' from jsonb_array_elements(public.get_app_database_v3()->'events') e where e->>'id'=(select event_id::text from set_case))) s where s->>'id'=run_id::text;
  title:=saved->>'name';
- if title<>to_char(now() at time zone 'Europe/Prague','FMDD. FMMM. YYYY') then raise exception 'Default date'; end if;
+ if title<>to_char(now() at time zone 'Europe/Prague','FMDD. FMMM. YYYY HH24:MI') then raise exception 'Default date'; end if;
  if not (saved->>'published')::boolean or jsonb_array_length(saved->'roster')<>4 then raise exception 'Empty-pair set with unpaired members'; end if;
  select jsonb_array_length(e->'pairSets') into before_count from jsonb_array_elements(public.get_app_database_v3()->'events') e where e->>'id'=(select event_id::text from set_case);
  begin perform public.save_pairs_v3((select event_id from set_case),'[]',true,repeat('X',121)); raise exception 'Expected long title rejection'; exception when raise_exception then if sqlerrm='Expected long title rejection' then raise; end if; end;

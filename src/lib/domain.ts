@@ -1,6 +1,6 @@
 export type AppRole = "admin" | "member";
 export type AccessMode = "admin" | "member" | "shared";
-export type PairingRole = "leader" | "follower";
+export type PairingRole = "leader" | "follower" | "musician";
 export type ExperienceLevel = "beginner" | "advanced" | "experienced";
 export type AgeGroup = "young" | "old";
 export type EventType = "rehearsal" | "performance";
@@ -330,6 +330,7 @@ export interface AppApi {
     published?: boolean,
     blocks?: PairingBlock[],
     name?: string,
+    setId?: string,
   ): Promise<EnsembleEvent>;
   updateEventStatus(
     eventId: string,
@@ -375,6 +376,7 @@ export interface AppApi {
 export const roleLabels: Record<PairingRole, string> = {
   leader: "Tanečník",
   follower: "Tanečnice",
+  musician: "Muzikant",
 };
 
 export const experienceLabels: Record<ExperienceLevel, string> = {

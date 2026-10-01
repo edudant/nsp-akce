@@ -274,6 +274,7 @@ export function MembersPage({ canEdit }: { canEdit: boolean }) {
               <option value="all">Všechny role</option>
               <option value="leader">Tanečníci</option>
               <option value="follower">Tanečnice</option>
+              <option value="musician">Muzikanti</option>
             </Select>
             <Select
               aria-label="Filtrovat zařazení"
@@ -610,7 +611,11 @@ function MemberForm({
         </Field>
       </div>
       <div className="form-grid form-grid--3">
-        <Field htmlFor="member-role" label="Párovací role">
+        <Field
+          htmlFor="member-role"
+          label="Role"
+          hint="Muzikant hlásí účast, ale nevstupuje do párů."
+        >
           <Select
             id="member-role"
             onChange={(event) => setRole(event.target.value as PairingRole)}

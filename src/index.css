@@ -7121,3 +7121,22 @@ tbody tr:hover {
 .pair-set-header { flex-wrap: wrap; }
 .pair-set-header .select-wrap { flex: 1 1 180px; min-width: 0; }
 .pair-set-header > span { min-width: 0; overflow-wrap: anywhere; }
+
+.avatar--musician { background: #ebe3f4; color: #684b7b; }
+.series-list { display: grid; gap: 16px; }
+.series-view { border-top: 1px solid var(--border-soft); padding-top: 12px; min-width: 0; }
+.series-view__header { display: flex; align-items: center; gap: 8px; }
+.series-view__header h3 { flex: 1; margin: 0; min-width: 0; overflow-wrap: anywhere; font-size: 1rem; }
+.series-view__header .icon-button { flex-shrink: 0; }
+.series-view__songs { padding-left: 24px; margin: 8px 0 0; }
+.series-view__songs li { padding: 6px 4px; border-bottom: 1px solid var(--border-soft); overflow-wrap: anywhere; }
+.song-series { margin: 0; padding: 0; border: 0; }
+.song-order-list > small { display: block; color: var(--muted); font-size: .75rem; margin-bottom: 6px; }
+.song-order-list ol { list-style: none; padding: 0; margin: 0; }
+.song-order-list li { display: grid; grid-template-columns: 32px minmax(0,1fr) 32px; align-items: center; gap: 6px; padding: 4px 0; min-height: 40px; border-bottom: 1px solid var(--border-soft); }
+.song-order-list li.is-dragging { background: #e4f0e9; }
+.song-order-list .icon-button { width: 32px; height: 32px; min-width: 32px; min-height: 32px; padding: 6px; }
+.song-order-list__title { min-width: 0; overflow-wrap: anywhere; font-size: .85rem; }
+.song-order-list__number { color: var(--muted); }
+.song-drag-handle { touch-action: none; cursor: grab; }
+.song-drag-handle:active { cursor: grabbing; }
