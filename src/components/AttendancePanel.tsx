@@ -323,7 +323,6 @@ export function AttendancePanel({
                     </span>
                   )}
                   {record.standing && " · má stát"}
-                  {record.actualStanding && " · skutečně stál"}
                 </>
               }
               meta={

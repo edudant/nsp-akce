@@ -7,20 +7,13 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "./AppShell";
-import { EventStateActions } from "./EventStateActions";
-import type { EnsembleEvent, SessionUser } from "../lib/domain";
+import type { SessionUser } from "../lib/domain";
 afterEach(cleanup);
 const session: SessionUser = {
   displayName: "Správce",
   role: "admin",
   accessMode: "admin",
 };
-const event = {
-  id: "e",
-  type: "performance",
-  status: "open",
-  canClose: true,
-} as EnsembleEvent;
 describe("Administrative navigation and event transitions", () => {
   it("keeps preview exclusively in the menu and shows all settings routes", () => {
     const toggle = vi.fn();
@@ -76,35 +69,5 @@ describe("Administrative navigation and event transitions", () => {
     expect(
       screen.queryByRole("link", { name: "Přístupy" }),
     ).not.toBeInTheDocument();
-  });
-  it("explains confirmation before applying the state transition", () => {
-    const onChange = vi.fn();
-    render(
-      <EventStateActions event={event} pending={false} onChange={onChange} />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Potvrdit akci" }));
-    expect(onChange).not.toHaveBeenCalled();
-    const dialog = screen.getByRole("dialog");
-    expect(
-      within(dialog).getByText(/Odpovědi se uzamknou/),
-    ).toBeInTheDocument();
-    fireEvent.click(
-      within(dialog).getByRole("button", { name: "Potvrdit akci" }),
-    );
-    expect(onChange).toHaveBeenCalledWith("confirmed");
-  });
-  it("prevents premature closure and gives the reason", () => {
-    render(
-      <EventStateActions
-        event={{ ...event, type: "rehearsal", canClose: false }}
-        pending={false}
-        onChange={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole("button", { name: "Uzavřít akci" })).toBeDisabled();
-    expect(
-      screen.getByText("Uzavření je dostupné po začátku akce."),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 });

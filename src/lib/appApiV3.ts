@@ -1,3 +1,4 @@
+import { historyPairs } from "./pairSets";
 import type {
   AppApi,
   AppDatabase,
@@ -53,12 +54,11 @@ export async function getDatabaseV3(
         points: record?.earnedPoints ?? 0,
         pairs:
           event.type === "performance"
-            ? (event.actualPairs ?? event.pairs)
+            ? historyPairs(event)
                 .filter(
                   (pair) =>
-                    pair.actual &&
-                    (pair.leaderId === db.myMemberId ||
-                      pair.followerId === db.myMemberId),
+                    pair.leaderId === db.myMemberId ||
+                    pair.followerId === db.myMemberId,
                 )
                 .map((pair) => {
                   const partnerId =
@@ -118,11 +118,9 @@ export const appApiV3: AppApi = {
           points: record?.earnedPoints ?? 0,
           pairs:
             event.type === "performance"
-              ? (event.actualPairs ?? event.pairs)
+              ? historyPairs(event)
                   .filter(
-                    (pair) =>
-                      pair.actual &&
-                      (pair.leaderId === id || pair.followerId === id),
+                    (pair) => pair.leaderId === id || pair.followerId === id,
                   )
                   .map((pair) => {
                     const partnerId =
@@ -207,24 +205,6 @@ export const appApiV3: AppApi = {
       pairs,
       published,
       set_name: name?.trim() || null,
-    });
-    if (error) throw error;
-    return eventById(id);
-  },
-  async confirmActualPairs(id) {
-    const event = await eventById(id);
-    if (event.type !== "performance" || event.seasonKind !== "dance")
-      throw new Error("Skutečné páry jsou pouze pro taneční vystoupení.");
-    const client = requireSupabase();
-    const run = await client
-      .from("pairing_runs")
-      .select("id")
-      .eq("event_id", id)
-      .eq("status", "published")
-      .single();
-    if (run.error) throw run.error;
-    const { error } = await client.rpc("confirm_actual_pairs", {
-      target_run_id: run.data.id,
     });
     if (error) throw error;
     return eventById(id);

@@ -7099,3 +7099,25 @@ tbody tr:hover {
   .program-reader-controls .program-notes-toggle { font-size: .85rem; }
   .program-reader { padding: 1.1rem 1rem; }
 }
+.pairing-editor { display: grid; gap: 14px; }
+.pairing-settings { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border-soft); border-radius: 10px; background: var(--surface-soft, #f8f7f2); }
+.pairing-settings__heading, .pairing-settings__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.pairing-settings__heading h3, .pairing-message { margin: 0; }
+.pairing-settings__heading .context-help { margin: 0; padding: 0; border: 0; background: transparent; }
+.pairing-settings__row select { width: auto; min-width: 180px; }
+.pairing-settings__row span, .pairing-settings > small { font-size: .8rem; color: var(--muted); }
+.pairing-tuning { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
+.pairing-tuning label { display: grid; gap: 2px; font-size: .8rem; }
+.pairing-tuning label span { display: flex; justify-content: space-between; gap: 4px; }
+.pairing-tuning input { width: 100%; min-height: 24px; padding: 0; }
+.pairing-check { display: flex; align-items: center; gap: 8px; font-size: .85rem; }
+.pairing-check input { width: 18px; min-height: 18px; }
+.pairing-standing summary { cursor: pointer; font-size: .8rem; }
+.standing-picker--compact { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 6px; max-height: 180px; overflow-y: auto; margin: 8px 0 0; font-size: .8rem; }
+.pairing-editor__footer { display: flex; align-items: end; gap: 12px; }
+.pairing-editor__footer .field { flex: 1; margin: 0; }
+@media(max-width: 600px) { .pairing-tuning { grid-template-columns: repeat(2,minmax(0,1fr)); } .pairing-editor__footer { flex-wrap: wrap; } .pairing-editor__footer .field { flex-basis: 100%; } }
+
+.pair-set-header { flex-wrap: wrap; }
+.pair-set-header .select-wrap { flex: 1 1 180px; min-width: 0; }
+.pair-set-header > span { min-width: 0; overflow-wrap: anywhere; }

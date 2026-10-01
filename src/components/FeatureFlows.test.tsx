@@ -154,10 +154,112 @@ describe("feature UI flows", () => {
       screen.getByRole("button", { name: "Přidat sadu párů" }),
     );
     expect(
+      within(screen.getByRole("dialog")).getByRole("heading", {
+        name: "Generátor párů",
+      }),
+    ).toBeVisible();
+    expect(
       screen.getByRole("button", { name: "Vygenerovat návrh" }),
     ).toBeVisible();
     expect(screen.getByLabelText("Název sady")).toHaveValue(
       formatDate(todayInPrague(), "d. M. yyyy"),
+    );
+  });
+  it("edits a selected performance set in a dialog and Escape closes only pair detail", async () => {
+    const pair = {
+      id: "p",
+      leaderId: "a",
+      followerId: "b",
+      ageGroup: "old" as const,
+      round: 1,
+      belowLine: false,
+    };
+    const latest = {
+      id: "latest",
+      name: "Večerní",
+      createdAt: "2026-10-01T16:00:00Z",
+      published: true,
+      pairs: [pair],
+    };
+    setup(
+      fixture({
+        attendanceScope: "all",
+        attendance: members.map((m) => ({
+          memberId: m.id,
+          status: "present",
+          interest: "yes",
+          selected: true,
+        })),
+        pairSets: [
+          {
+            ...latest,
+            id: "old",
+            name: "Ranní",
+            createdAt: "2026-10-01T08:00:00Z",
+          },
+          latest,
+        ],
+      }),
+    );
+    wrap(<EventDetailPage eventId="e" canAdmin canEdit canPair />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Páry" }));
+    expect(screen.getByLabelText("Uložená sada párů")).toHaveValue("latest");
+    await user.selectOptions(screen.getByLabelText("Uložená sada párů"), "old");
+    await user.click(screen.getByRole("button", { name: "Upravit sadu" }));
+    expect(screen.getByLabelText("Název sady")).toHaveValue("Ranní");
+    await user.click(
+      screen.getByRole("button", { name: "Detail páru: Adam + Žofie" }),
+    );
+    expect(screen.getAllByRole("dialog")).toHaveLength(2);
+    await user.keyboard("{Escape}");
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByLabelText("Název sady")).toBeVisible();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Potvrdit skutečné/ }),
+    ).not.toBeInTheDocument();
+  });
+  it("allows every admin status in the edit form even for a future event", async () => {
+    const e = fixture({
+      type: "rehearsal",
+      date: "2099-10-01",
+      canClose: false,
+    });
+    setup(e);
+    const save = vi.fn();
+    wrap(<EventForm event={e} loading={false} onSave={save} />);
+    const user = userEvent.setup();
+    for (const status of [
+      "draft",
+      "open",
+      "confirmed",
+      "closed",
+      "cancelled",
+    ]) {
+      await user.selectOptions(screen.getByLabelText("Stav akce"), status);
+      await user.click(screen.getByRole("button", { name: "Uložit akci" }));
+      expect(save).toHaveBeenLastCalledWith(
+        expect.objectContaining({ status }),
+      );
+    }
+  });
+  it("preserves deadline seconds on an ordinary edit and uses a changed deadline", async () => {
+    const e = fixture({ responseDeadline: "2026-10-01T14:34:51.123Z" });
+    setup(e);
+    const save = vi.fn();
+    wrap(<EventForm event={e} loading={false} onSave={save} />);
+    await userEvent.click(screen.getByRole("button", { name: "Uložit akci" }));
+    expect(save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ responseDeadline: e.responseDeadline }),
+    );
+    fireEvent.change(screen.getByLabelText("Termín pro vyjádření"), {
+      target: { value: "2026-10-01T18:00" },
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Uložit akci" }));
+    expect(save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ responseDeadline: "2026-10-01T16:00:00.000Z" }),
     );
   });
   it("shows an explicit empty generation result and the corrective action", async () => {

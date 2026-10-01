@@ -474,16 +474,26 @@ try {
     2,
   );
   ok(await rpc(admin, "event", { id: performance, status: "closed" }));
+  event = (await db(admin)).events.find((e) => e.id === performance);
+  assert.equal(event.actualPairs, undefined);
+  assert.equal(event.pairSets.find((s) => s.id === run).pairs.length, 2);
   assert.equal(
-    ok(await admin.rpc("confirm_actual_pairs", { target_run_id: run })),
+    event.pairSets.find((s) => s.id === run).pairs.filter((p) => !p.belowLine)
+      .length,
     1,
   );
-  event = (await db(admin)).events.find((e) => e.id === performance);
-  assert.equal(event.actualPairs.length, 1);
-  assert.equal(event.attendance.filter((r) => r.actualStanding).length, 2);
+  assert.equal(
+    event.attendance.some((r) => "actualStanding" in r),
+    false,
+  );
+  const nextRun = ok(await save(performance, pairs, true));
+  event = (await db(member)).events.find((e) => e.id === performance);
+  assert.equal(event.pairSets.filter((s) => s.published).length, 2);
+  assert.ok(event.pairSets.some((s) => s.id === run));
+  assert.ok(event.pairSets.some((s) => s.id === nextRun));
   fail(await rpc(admin, "event", { id: performance, seasonId: carols }));
   pass(
-    "Pair draft privacy, publication, group/duplicate validation and actual pairs excluding below line",
+    "Pair draft privacy, saved performance sets, group/duplicate validation and no actual confirmation",
   );
   ok(
     await rpc(admin, "attendance", {
@@ -497,7 +507,7 @@ try {
   ok(await save(rehearsal, [pairs[0]], true));
   event = (await db(member)).events.find((e) => e.id === rehearsal);
   assert.equal(event.pairSets.filter((s) => s.published).length, 2);
-  assert.equal(event.actualPairs.length, 0);
+  assert.equal(event.actualPairs, undefined);
   pass("Multiple rehearsal sets are visible and never actual history");
   const carolEvent = ok(
     await rpc(admin, "event", input("performance", carols)),

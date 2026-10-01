@@ -5,7 +5,12 @@ import { Button, Field, Select } from "./Ui";
 import { Help, ScoringHelp } from "./Help";
 import { todayInPrague } from "./formatters";
 import { pragueLocalToIso } from "../lib/supabaseData";
-import type { EnsembleEvent, EventType } from "../lib/domain";
+import {
+  eventStatusLabels,
+  type EventStatus,
+  type EnsembleEvent,
+  type EventType,
+} from "../lib/domain";
 export type EventFormInput = Omit<EnsembleEvent, "id" | "attendance" | "pairs">;
 export function EventForm({
   event,
@@ -19,6 +24,7 @@ export function EventForm({
   onSave: (input: EventFormInput) => void;
 }) {
   const db = useDatabase();
+  const [status, setStatus] = useState<EventStatus>(event?.status ?? "open");
   const [type, setType] = useState<EventType>(event?.type ?? "rehearsal");
   const [title, setTitle] = useState(event?.title ?? "Páteční zkouška");
   const [date, setDate] = useState(() => {
@@ -37,21 +43,20 @@ export function EventForm({
   const [weight, setWeight] = useState(String(event?.weight ?? 1));
   const [oldPairs, setOldPairs] = useState(String(event?.oldPairs ?? 8));
   const [youngPairs, setYoungPairs] = useState(String(event?.youngPairs ?? 0));
-  const [deadline, setDeadline] = useState(() =>
-    event?.responseDeadline
-      ? new Intl.DateTimeFormat("sv-SE", {
-          timeZone: "Europe/Prague",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        })
-          .format(new Date(event.responseDeadline))
-          .replace(" ", "T")
-      : "",
-  );
+  const initialDeadline = event?.responseDeadline
+    ? new Intl.DateTimeFormat("sv-SE", {
+        timeZone: "Europe/Prague",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+        .format(new Date(event.responseDeadline))
+        .replace(" ", "T")
+    : "";
+  const [deadline, setDeadline] = useState(initialDeadline);
   const [singing, setSinging] = useState(event?.singing ?? false);
   const [note, setNote] = useState(event?.note ?? "");
   const [formError, setFormError] = useState("");
@@ -76,14 +81,16 @@ export function EventForm({
       endTime: end,
       location,
       seasonId,
-      status: event?.status ?? "open",
+      status,
       weight: Number(weight),
       oldPairs: type === "performance" && dance ? Number(oldPairs) : 0,
       youngPairs: type === "performance" && dance ? Number(youngPairs) : 0,
       capacityPairs: Number(oldPairs) + Number(youngPairs),
       responseDeadline:
         type === "performance"
-          ? pragueLocalToIso(deadline.slice(0, 10), deadline.slice(11, 16))
+          ? deadline === initialDeadline && event?.responseDeadline
+            ? event.responseDeadline
+            : pragueLocalToIso(deadline.slice(0, 10), deadline.slice(11, 16))
           : undefined,
       singing,
       note,
@@ -92,6 +99,25 @@ export function EventForm({
   };
   return (
     <form className="dialog-form" onSubmit={submit}>
+      {event && (
+        <Field label="Stav akce">
+          <Select
+            aria-label="Stav akce"
+            value={status}
+            onChange={(e) => setStatus(e.target.value as EventStatus)}
+          >
+            {Object.entries(eventStatusLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </Select>
+          <small>
+            Admin může vybrat libovolný stav. Uzavření doplní nezapsanou účast z
+            odpovědí a započítá body.
+          </small>
+        </Field>
+      )}
       {!event && (
         <Field label="Typ akce">
           <Select

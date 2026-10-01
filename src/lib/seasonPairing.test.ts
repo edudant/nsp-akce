@@ -406,7 +406,7 @@ describe("season pairing", () => {
       ).warnings.join(),
     ).toContain("nelze vytvořit pár");
   });
-  it("does not invent byes for attendance without confirmed actual standing", () => {
+  it("does not invent byes for attendance without a saved set", () => {
     const ms = [
       member("a", "leader"),
       member("b", "leader"),
@@ -436,7 +436,7 @@ describe("season pairing", () => {
       baseline.pairs,
     );
   });
-  it("protects recent confirmed standing when historical bye counts are equal", () => {
+  it("protects recent saved standing when historical bye counts are equal", () => {
     const ms = [
       member("a", "leader"),
       member("b", "leader"),
@@ -453,6 +453,24 @@ describe("season pairing", () => {
           id: `past-${id}`,
           status: "closed",
           date,
+          pairSets: [
+            {
+              id: `set-${id}`,
+              name: date,
+              createdAt: date,
+              published: true,
+              pairs: [],
+              roster: [
+                {
+                  memberId: id,
+                  fullName: id,
+                  role: "leader",
+                  ageGroups: ["old"],
+                  standing: true,
+                },
+              ],
+            },
+          ],
           attendance: [
             {
               memberId: id,
@@ -483,7 +501,15 @@ describe("season pairing", () => {
     const e = event(ms, { status: "closed" }),
       db = database(ms, e);
     const baseline = generateSeasonPairs(db, e, defaultTuning, "s");
-    e.actualPairs = baseline.pairs.map((p) => ({ ...p, actual: true }));
+    e.pairSets = [
+      {
+        id: "saved",
+        name: "saved",
+        createdAt: e.date,
+        published: true,
+        pairs: baseline.pairs,
+      },
+    ];
     e.attendance.forEach((r) => {
       r.actualStanding = true;
       r.earnedPoints = 1000;

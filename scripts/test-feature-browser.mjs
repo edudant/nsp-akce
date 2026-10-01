@@ -307,13 +307,14 @@ try {
   await admin.getByLabel(/Žena v páru/).waitFor();
   const belowLine = admin
     .getByRole("dialog")
+    .last()
     .getByRole("checkbox", { name: "Pod čarou", exact: true });
   const originallyBelow = await belowLine.isChecked();
   await belowLine.setChecked(!originallyBelow);
   await belowLine.setChecked(originallyBelow);
   await admin.getByRole("button", { name: "Hotovo", exact: true }).click();
   await admin.getByRole("button", { name: "Uložit", exact: true }).click();
-  await admin.getByRole("button", { name: "Přidat sadu párů" }).waitFor();
+  await admin.getByRole("dialog").waitFor({ state: "hidden" });
   pass(
     "Performance sliders, directional wishes, main/below-line pairs, manual editor and saving a visible set",
   );
@@ -357,16 +358,13 @@ try {
     "Series drafts are hidden; confirmed series are visible on mobile without overflow",
   );
   await admin
-    .getByRole("button", { name: "Potvrdit akci", exact: true })
-    .click();
-  const stateDialog = admin.getByRole("dialog");
-  assert.ok((await stateDialog.innerText()).includes("Odpovědi se uzamknou"));
-  await stateDialog
-    .getByRole("button", { name: "Potvrdit akci", exact: true })
+    .getByRole("button", { name: "Upravit akci", exact: true })
     .click();
   await admin
-    .getByRole("button", { name: "Uzavřít akci", exact: true })
-    .waitFor();
+    .getByLabel("Stav akce", { exact: true })
+    .selectOption("confirmed");
+  await admin.getByRole("button", { name: "Uložit akci", exact: true }).click();
+  await admin.getByRole("dialog").waitFor({ state: "hidden" });
   await member.reload();
   assert.equal(
     await member
@@ -383,35 +381,22 @@ try {
   assert.equal(
     await admin
       .getByRole("button", { name: "Uzavřít akci", exact: true })
-      .isDisabled(),
-    true,
+      .count(),
+    0,
   );
   await admin
     .getByRole("button", { name: "Upravit akci", exact: true })
     .click();
-  await admin
-    .getByLabel("Datum akce")
-    .fill(new Date(Date.now() - 86400000).toISOString().slice(0, 10));
+  await admin.getByLabel("Stav akce", { exact: true }).selectOption("closed");
   await admin.getByRole("button", { name: "Uložit akci", exact: true }).click();
   await admin.getByRole("dialog").waitFor({ state: "hidden" });
-  await admin
-    .getByRole("button", { name: "Uzavřít akci", exact: true })
-    .click();
-  assert.ok((await admin.getByRole("dialog").innerText()).includes("Ručně"));
-  await admin
-    .getByRole("dialog")
-    .getByRole("button", { name: "Uzavřít akci", exact: true })
-    .click();
-  await admin
-    .getByRole("button", { name: "Znovu otevřít akci", exact: true })
-    .waitFor();
   await admin.getByText("Audit akce", { exact: true }).click();
   await admin.locator(".audit-list li").first().waitFor();
   assert.ok(
     (await admin.locator(".audit-list").innerText()).includes("Uzavřená"),
   );
   pass(
-    "Explicit state buttons explain confirmation/closure, prevent premature closure and retain state audit",
+    "Admin selects any status in edit form, including future closure, and retains state audit",
   );
 
   await go(
@@ -505,7 +490,7 @@ try {
     .first()
     .waitFor();
   await admin.getByRole("button", { name: "Uložit", exact: true }).click();
-  await admin.getByText("Páry jsou zveřejněné.", { exact: true }).waitFor();
+  await admin.getByRole("dialog").waitFor({ state: "hidden" });
   await go(
     member,
     "/udalosti/" + fixture.rehearsal,
@@ -513,9 +498,12 @@ try {
   );
   await member.reload();
   await member.getByRole("tab", { name: "Páry", exact: true }).click();
-  await member
-    .getByRole("heading", { name: "Uložené sady párů", exact: true })
-    .waitFor();
+  assert.equal(
+    await member
+      .getByRole("heading", { name: "Uložené sady párů", exact: true })
+      .count(),
+    0,
+  );
   const sets = member.getByLabel("Uložená sada párů");
   assert.ok((await sets.getByRole("option").count()) >= 3);
   const last = await sets.inputValue();
@@ -538,7 +526,9 @@ try {
       exact: true,
     })
     .click();
-  await admin.getByRole("button", { name: "Upravit údaje", exact: true }).click();
+  await admin
+    .getByRole("button", { name: "Upravit údaje", exact: true })
+    .click();
   await admin.getByLabel("Název", { exact: true }).waitFor();
   await admin
     .getByRole("dialog")
@@ -553,11 +543,13 @@ try {
     .getByRole("button", { name: "Zavřít", exact: true })
     .click();
   await go(admin, "/texty/pasma", "Texty");
-  await admin.getByRole("button", { name: "Přidat pásmo", exact: true }).click();
-  await admin.getByLabel("Název", { exact: true }).fill("Browser band " + Date.now());
   await admin
-    .getByRole("button", { name: "Přidat", exact: true })
+    .getByRole("button", { name: "Přidat pásmo", exact: true })
     .click();
+  await admin
+    .getByLabel("Název", { exact: true })
+    .fill("Browser band " + Date.now());
+  await admin.getByRole("button", { name: "Přidat", exact: true }).click();
   await admin.getByRole("dialog").waitFor({ state: "hidden" });
   await go(admin, "/nastaveni/pristupy", "Přístupy");
   await admin
@@ -701,7 +693,7 @@ try {
       .first()
       .waitFor();
     await admin.getByRole("button", { name: "Uložit", exact: true }).click();
-    await admin.getByRole("button", { name: "Přidat sadu párů" }).waitFor();
+    await admin.getByRole("dialog").waitFor({ state: "hidden" });
     await admin.setViewportSize({ width: 390, height: 844 });
     await noOverflow(admin);
     await admin.screenshot({

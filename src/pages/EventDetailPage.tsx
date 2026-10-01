@@ -18,8 +18,8 @@ import {
   IconButton,
 } from "../components/Ui";
 import { AuditDisclosure } from "../components/EventAudit";
-import { EventStateActions } from "../components/EventStateActions";
-import { Help, InfoHelp, PointsTag } from "../components/Help";
+import { visiblePairSets } from "../lib/pairSets";
+import { InfoHelp, PointsTag } from "../components/Help";
 import { AttendancePanel, ResponseEditor } from "../components/AttendancePanel";
 import { EventForm } from "../components/EventForm";
 import { EventProgramEditor } from "../components/EventProgramEditor";
@@ -39,7 +39,6 @@ import type {
   AppDatabase,
   EnsembleEvent,
   InterestStatus,
-  EventStatus,
   EventProgramUpdateItem,
 } from "../lib/domain";
 export function EventDetailPage({
@@ -90,6 +89,7 @@ function EventContent({
     "detail" | "participants" | "pairs" | "program" | "songs"
   >("detail");
   const [pairing, setPairing] = useState(false);
+  const [editingSet, setEditingSet] = useState(false);
   const [pairSetId, setPairSetId] = useState("");
   const [wishes, setWishes] = useState(
     (db.partnerWishes ?? [])
@@ -103,11 +103,6 @@ function EventContent({
       query.invalidateQueries({ queryKey: ["scores"] }),
     ]);
   };
-  const status = useMutation({
-    mutationFn: (value: EventStatus) =>
-      appApi.updateEventStatus(event.id, value),
-    onSuccess: refresh,
-  });
   const response = useMutation({
     mutationFn: ({
       interest,
@@ -124,15 +119,14 @@ function EventContent({
   });
   const saveEvent = useMutation({
     mutationFn: (patch: Partial<EnsembleEvent>) =>
-      appApi.updateEvent(event.id, patch),
+      appApi.updateEvent(event.id, {
+        ...patch,
+        status: patch.status === event.status ? undefined : patch.status,
+      }),
     onSuccess: async () => {
       setEditing(false);
       await refresh();
     },
-  });
-  const confirm = useMutation({
-    mutationFn: () => appApi.confirmActualPairs(event.id),
-    onSuccess: refresh,
   });
   const program = useMutation({
     mutationFn: (items: EventProgramUpdateItem[]) =>
@@ -151,16 +145,10 @@ function EventContent({
   const canRespond = canRespondToEvent(event, todayInPrague());
   const started = eventHasStarted(event);
   const dance = event.seasonKind !== "carols";
-  const pairSets = [...(event.pairSets ?? [])]
-    .filter((s) => admin || s.published)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const pairSets = visiblePairSets(event, admin);
   const selectedPairSet =
     pairSets.find((s) => s.id === pairSetId) ?? pairSets[0];
-  const hasPairs =
-    dance &&
-    (event.type === "rehearsal"
-      ? pairSets.length > 0
-      : event.pairs.length > 0 || event.pairsPublished);
+  const hasPairs = dance && pairSets.length > 0;
   const hasProgram = !!(event.programItems?.length || event.program);
   const sections = [
     ...(event.attendanceScope === "all"
@@ -204,8 +192,8 @@ function EventContent({
           <InfoHelp label="Stavy akce a odpovědi">
             <p>
               {event.type === "rehearsal"
-                ? "Na zkoušku odpovídáte ano/ne/zatím nevím s povinnou poznámkou, dokud ji admin neuzavře. Při uzavření po začátku se skutečná účast předvyplní podle odpovědí; admin ji může opravit."
-                : "Na vystoupení odpovídáte ano/ne/zatím nevím s povinnou poznámkou. Po termínu pro vyjádření se akce automaticky potvrdí a odpovědi smí měnit jen admin. Před potvrzením vidíte vlastní odpověď, potom odpovědi ostatních."}
+                ? "Na zkoušku odpovídáte ano/ne/zatím nevím s povinnou poznámkou, dokud ji admin neuzavře. Při uzavření se skutečná účast předvyplní podle odpovědí; admin ji může opravit."
+                : "Na vystoupení odpovídáte ano/ne/zatím nevím s povinnou poznámkou. Po termínu pro vyjádření se akce automaticky potvrdí a odpovědi smí měnit jen admin. Admin ji může znovu otevřít. Před potvrzením vidíte vlastní odpověď, potom odpovědi ostatních."}
             </p>
           </InfoHelp>
         </div>
@@ -217,11 +205,6 @@ function EventContent({
             <Button variant="secondary" onClick={() => setEditing(true)}>
               Upravit akci
             </Button>
-            <EventStateActions
-              event={event}
-              pending={status.isPending}
-              onChange={(value) => status.mutate(value)}
-            />
           </>
         )}
       </div>
@@ -408,119 +391,94 @@ function EventContent({
       )}
       {activeSection === "pairs" && dance && (
         <section role="tabpanel" id="panel-pairs" aria-labelledby="tab-pairs">
-          {canPair && admin && (
-            <div className="compact-list__header">
-              <span />
-              {pairing ? (
-                <Button variant="secondary" onClick={() => setPairing(false)}>
-                  Zpět na sady
-                </Button>
+          <Card className="feature-card">
+            <div className="compact-list__header pair-set-header">
+              {pairSets.length > 1 ? (
+                <Select
+                  aria-label="Uložená sada párů"
+                  value={selectedPairSet?.id ?? ""}
+                  onChange={(e) => setPairSetId(e.target.value)}
+                >
+                  {pairSets.map((set) => (
+                    <option key={set.id} value={set.id}>
+                      {set.name}
+                    </option>
+                  ))}
+                </Select>
               ) : (
+                <span>{selectedPairSet?.name}</span>
+              )}
+              {canPair && admin && (
                 <IconButton
                   label="Přidat sadu párů"
-                  onClick={() => setPairing(true)}
+                  onClick={() => {
+                    setEditingSet(false);
+                    setPairing(true);
+                  }}
                 >
                   <Plus aria-hidden="true" />
                 </IconButton>
               )}
-            </div>
-          )}
-          {pairing && admin ? (
-            <EventPairingEditor
-              db={db}
-              event={event}
-              admin
-              onSaved={() => {
-                setPairing(false);
-                setPairSetId("");
-              }}
-            />
-          ) : (
-            <Card className="feature-card">
-              {event.type === "rehearsal" ? (
-                <>
-                  {pairSets.length > 1 && (
-                    <Select
-                      aria-label="Uložená sada párů"
-                      value={selectedPairSet?.id ?? ""}
-                      onChange={(e) => setPairSetId(e.target.value)}
-                    >
-                      {pairSets.map((set, index) => (
-                        <option key={set.id} value={set.id}>
-                          {index === 0 ? "Poslední · " : ""}
-                          {set.name}
-                        </option>
-                      ))}
-                    </Select>
-                  )}
-                  {selectedPairSet ? (
-                    <section>
-                      <h3>{selectedPairSet.name}</h3>
-                      {selectedPairSet.name !==
-                        formatSetDate(selectedPairSet.createdAt) && (
-                        <p>
-                          <time dateTime={selectedPairSet.createdAt}>
-                            {formatSetDate(selectedPairSet.createdAt)}
-                          </time>
-                        </p>
-                      )}
-                      <PairingRoster
-                        db={db}
-                        event={event}
-                        pairs={selectedPairSet.pairs}
-                        roster={selectedPairSet.roster}
-                        admin={false}
-                        disabled={false}
-                        onChange={() => {}}
-                      />
-                    </section>
-                  ) : (
-                    <p>Zatím žádná sada.</p>
-                  )}
-                </>
-              ) : (
-                <>
-                  {event.pairingName && <h3>{event.pairingName}</h3>}
-                  {event.pairingCreatedAt &&
-                    event.pairingName !==
-                      formatSetDate(event.pairingCreatedAt) && (
-                      <p>
-                        <time dateTime={event.pairingCreatedAt}>
-                          {formatSetDate(event.pairingCreatedAt)}
-                        </time>
-                      </p>
-                    )}
-                  <PairingRoster
-                    db={db}
-                    event={event}
-                    pairs={event.pairs}
-                    roster={event.pairingRoster}
-                    admin={false}
-                    disabled={false}
-                    onChange={() => {}}
-                  />
-                  {admin &&
-                    event.status === "closed" &&
-                    event.pairsPublished &&
-                    event.pairs.length > 0 && (
-                      <Button
-                        loading={confirm.isPending}
-                        onClick={() => confirm.mutate()}
-                      >
-                        Potvrdit skutečné páry
-                      </Button>
-                    )}
-                  <Help title="Skutečně odtančené páry">
-                    <p>
-                      Po vystoupení upravte sestavu a skutečnou účast, poté
-                      potvrďte, kdo skutečně tančil. Páry pod čarou se
-                      nepotvrzují automaticky. Zkouškové sady se do historie
-                      nezapočítávají.
-                    </p>
-                  </Help>
-                </>
+              {canPair && admin && selectedPairSet && (
+                <Button
+                  size="small"
+                  variant="secondary"
+                  onClick={() => {
+                    setEditingSet(true);
+                    setPairing(true);
+                  }}
+                >
+                  Upravit sadu
+                </Button>
               )}
-            </Card>
+            </div>
+            {selectedPairSet ? (
+              <>
+                {selectedPairSet.name !==
+                  formatSetDate(selectedPairSet.createdAt) && (
+                  <p>
+                    <time dateTime={selectedPairSet.createdAt}>
+                      {formatSetDate(selectedPairSet.createdAt)}
+                    </time>
+                  </p>
+                )}
+                <PairingRoster
+                  db={db}
+                  event={event}
+                  pairs={selectedPairSet.pairs}
+                  roster={selectedPairSet.roster}
+                  admin={false}
+                  disabled={false}
+                  onChange={() => {}}
+                />
+              </>
+            ) : (
+              <p>Zatím žádná sada.</p>
+            )}
+          </Card>
+          {admin && (
+            <Dialog
+              open={pairing}
+              title={editingSet ? "Upravit sadu" : "Generátor párů"}
+              size="large"
+              onClose={() => setPairing(false)}
+            >
+              {pairing && (
+                <EventPairingEditor
+                  db={db}
+                  event={{
+                    ...event,
+                    pairs: selectedPairSet?.pairs ?? event.pairs,
+                  }}
+                  initialName={editingSet ? selectedPairSet?.name : undefined}
+                  admin
+                  onSaved={() => {
+                    setPairing(false);
+                    setPairSetId("");
+                  }}
+                />
+              )}
+            </Dialog>
           )}
         </section>
       )}
@@ -574,15 +532,9 @@ function EventContent({
           )}
         </section>
       )}
-      {(status.error ||
-        response.error ||
-        saveWishes.error ||
-        confirm.error) && (
+      {(response.error || saveWishes.error) && (
         <p role="alert" className="form-error">
-          {status.error?.message ??
-            response.error?.message ??
-            saveWishes.error?.message ??
-            confirm.error?.message}
+          {response.error?.message ?? saveWishes.error?.message}
         </p>
       )}
       {admin && (

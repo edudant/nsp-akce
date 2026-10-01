@@ -1,3 +1,4 @@
+import { historyPairs, historyStandingIds } from "./pairSets";
 import { solve, type Constraint } from "yalps";
 import {
   scorePairingCandidates,
@@ -157,14 +158,7 @@ export function generateSeasonPairs(
       };
   const candidates = scorePairingCandidates({
     members: available.map((m) => {
-      const byes = past.filter((e) =>
-        e.attendance.some(
-          (r) =>
-            r.memberId === m.id &&
-            (r.status === "present" || r.status === "partial") &&
-            r.actualStanding === true,
-        ),
-      );
+      const byes = past.filter((e) => historyStandingIds(e).includes(m.id));
       return {
         id: m.id,
         role: m.role,
@@ -209,14 +203,12 @@ export function generateSeasonPairs(
     history: rehearsal
       ? []
       : past.flatMap((e) =>
-          (e.actualPairs ?? e.pairs)
-            .filter((p) => p.actual)
-            .map((p) => ({
-              memberAId: p.leaderId,
-              memberBId: p.followerId,
-              occurredAt: e.date,
-              actual: true,
-            })),
+          historyPairs(e).map((p) => ({
+            memberAId: p.leaderId,
+            memberBId: p.followerId,
+            occurredAt: e.date,
+            actual: true,
+          })),
         ),
     rounds: 1,
     seed,

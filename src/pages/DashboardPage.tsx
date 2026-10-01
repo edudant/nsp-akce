@@ -83,7 +83,6 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
       event.type === "performance" &&
       event.attendance.some((record) => record.interest === "unset"),
   );
-  const pairingEvent = upcoming.find((event) => !event.pairsPublished);
   const leadCount = activeMembers.filter(
     (member) => member.role === "leader",
   ).length;
@@ -222,7 +221,7 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
                 <h2>Na čem zapracovat</h2>
               </div>
               <Badge tone={missingResponses ? "red" : "green"}>
-                {missingResponses || pairingEvent ? "K řešení" : "Hotovo"}
+                {missingResponses ? "K řešení" : "Hotovo"}
               </Badge>
             </div>
             <div className="attention-list">
@@ -240,21 +239,7 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
                   <ArrowRight aria-hidden="true" />
                 </AppLink>
               ) : null}
-              {pairingEvent ? (
-                <AppLink to={`/pary?event=${pairingEvent.id}`}>
-                  <span className="attention-icon attention-icon--amber">
-                    <UsersRound aria-hidden="true" />
-                  </span>
-                  <span>
-                    <strong>Připravit páry</strong>
-                    <small>
-                      {pairingEvent.title} zatím nemá zveřejněný návrh
-                    </small>
-                  </span>
-                  <ArrowRight aria-hidden="true" />
-                </AppLink>
-              ) : null}
-              {!responseEvent && !pairingEvent ? (
+              {!responseEvent ? (
                 <AppLink to="/udalosti">
                   <span className="attention-icon attention-icon--green">
                     <CheckCircle2 aria-hidden="true" />

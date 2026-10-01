@@ -254,7 +254,15 @@ export function Dialog({
     if (!dialogRef.current?.contains(document.activeElement))
       dialogRef.current?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeRef.current();
+      if (
+        event.key === "Escape" &&
+        Array.from(
+          document.querySelectorAll('[role="dialog"][aria-modal="true"]'),
+        ).at(-1) === dialogRef.current
+      ) {
+        event.stopImmediatePropagation();
+        closeRef.current();
+      }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => {
