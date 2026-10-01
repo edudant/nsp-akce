@@ -5,6 +5,7 @@ import { appApi } from "../lib/dataApi";
 import type { AppDatabase, EnsembleEvent, SongSeries } from "../lib/domain";
 import { databaseQueryKey } from "./DataContext";
 import { Card, Button, Select, Dialog, IconButton } from "./Ui";
+import { AppLink } from "./Router";
 import { ListRow } from "./CompactList";
 
 export function SongSeriesPanel({
@@ -19,13 +20,14 @@ export function SongSeriesPanel({
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const visible = (event.songSeries ?? []).filter((s) => admin || s.confirmed);
+  const carols = event.seasonKind === "carols";
   const detail = visible.find((s) => s.id === editing);
   return (
     <Card className="feature-card">
       <header className="compact-list__header">
-        <h2>Písně</h2>
+        <h2>{carols ? "Koledy" : "Písně"}</h2>
         {admin && (
-          <IconButton label="Přidat písně" onClick={() => setAdding(true)}>
+          <IconButton label={carols ? "Přidat koledy" : "Přidat písně"} onClick={() => setAdding(true)}>
             <Plus aria-hidden="true" />
           </IconButton>
         )}
@@ -47,7 +49,7 @@ export function SongSeriesPanel({
                 ) : (
                   <div key={id} className="compact-row compact-row--readonly">
                     <span>
-                      <strong>{title}</strong>
+                      <AppLink to={`/pisne/${id}`}><strong>{title}</strong></AppLink>
                       <small className="song-subtitle">{series.name}</small>
                     </span>
                   </div>
@@ -63,10 +65,10 @@ export function SongSeriesPanel({
               );
         })}
       </div>
-      {!visible.some((s) => s.songIds.length) && <p>Zatím žádné písně.</p>}
+      {!visible.some((s) => s.songIds.length) && <p>{carols ? "Zatím žádné koledy." : "Zatím žádné písně."}</p>}
       <Dialog
         open={adding}
-        title="Přidat písně"
+        title={carols ? "Přidat koledy" : "Přidat písně"}
         onClose={() => setAdding(false)}
       >
         {adding && (
@@ -108,9 +110,10 @@ function SeriesEditor({
 }) {
   const query = useQueryClient();
   const [ids, setIds] = useState(series?.songIds ?? []);
-  const [name, setName] = useState(series?.name ?? "Písně");
+  const [name, setName] = useState(series?.name ?? (event.seasonKind === "carols" ? "Koledy" : "Písně"));
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
+  const kind = event.seasonKind === "carols" ? "carol" : "song";
   const usedElsewhere = new Set(
     (event.songSeries ?? [])
       .filter((s) => s.id !== series?.id)
@@ -158,7 +161,7 @@ function SeriesEditor({
             <div className="compact-row compact-row--readonly" key={id}>
               <span className="compact-row__title">
                 {index + 1}.{" "}
-                {db.songs?.find((s) => s.id === id)?.name ?? "Píseň"}
+                <AppLink to={`/pisne/${id}`}>{db.songs?.find((s) => s.id === id)?.name ?? "Píseň"}</AppLink>
               </span>
               <span className="compact-row__quick">
                 <IconButton
@@ -213,6 +216,7 @@ function SeriesEditor({
           ?.filter(
             (song) =>
               song.active &&
+              (song.kind ?? "song") === kind &&
               !usedElsewhere.has(song.id) &&
               song.name
                 .toLocaleLowerCase("cs")

@@ -47,11 +47,12 @@ describe("Administrative navigation and event transitions", () => {
         name: "Zobrazit jako člen",
       }),
     ).not.toBeInTheDocument();
-    for (const name of ["Sezóny", "Pásma", "Písně", "Přístupy", "Data"])
+    for (const name of ["Sezóny", "Přístupy", "Data"])
       expect(within(sidebar).getByRole("link", { name })).toHaveAttribute(
         "href",
         expect.stringContaining("/nastaveni/"),
       );
+    expect(within(sidebar).getByRole("link", { name: "Texty" })).toHaveAttribute("href", "#/texty");
     expect(within(sidebar).getByRole("link", { name: "Akce" })).toHaveAttribute(
       "href",
       "#/udalosti",

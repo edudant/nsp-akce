@@ -524,8 +524,8 @@ try {
   assert.notEqual(await sets.inputValue(), last);
   await sets.selectOption(last);
   pass("Random rehearsal generator publishes an additional visible set");
-  await go(admin, "/nastaveni/pisne", "Písně");
-  await admin.getByLabel("Hledat píseň").fill("Trumpetří");
+  await go(admin, "/texty/pisne", "Texty");
+  await admin.getByLabel("Hledat text").fill("Trumpetří");
   assert.ok(
     (await admin.locator("main").innerText()).includes(
       "Dyž sem já mou milou ponyjprv vidíl / Trumpetří",
@@ -538,7 +538,8 @@ try {
       exact: true,
     })
     .click();
-  await admin.getByLabel("Název písně").waitFor();
+  await admin.getByRole("button", { name: "Upravit údaje", exact: true }).click();
+  await admin.getByLabel("Název", { exact: true }).waitFor();
   await admin
     .getByRole("dialog")
     .getByRole("button", { name: "Zavřít", exact: true })
@@ -551,11 +552,11 @@ try {
     .getByRole("dialog")
     .getByRole("button", { name: "Zavřít", exact: true })
     .click();
-  await go(admin, "/nastaveni/pasma", "Pásma");
-  await admin.getByRole("button", { name: "Nové pásmo", exact: true }).click();
-  await admin.getByLabel("Název pásma").fill("Browser band " + Date.now());
+  await go(admin, "/texty/pasma", "Texty");
+  await admin.getByRole("button", { name: "Přidat pásmo", exact: true }).click();
+  await admin.getByLabel("Název", { exact: true }).fill("Browser band " + Date.now());
   await admin
-    .getByRole("button", { name: "Uložit pásmo", exact: true })
+    .getByRole("button", { name: "Přidat", exact: true })
     .click();
   await admin.getByRole("dialog").waitFor({ state: "hidden" });
   await go(admin, "/nastaveni/pristupy", "Přístupy");

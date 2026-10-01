@@ -550,7 +550,13 @@ function EventContent({
                     className="compact-row compact-row--readonly"
                     key={item.id}
                   >
-                    {item.name}
+                    {item.catalogId ? (
+                      <AppLink to={`/pasma/${item.catalogId}`}>
+                        {item.name}
+                      </AppLink>
+                    ) : (
+                      item.name
+                    )}
                   </div>
                 ))}
               </div>

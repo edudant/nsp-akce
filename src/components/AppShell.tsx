@@ -7,7 +7,6 @@ import {
   Medal,
   Menu,
   Settings,
-  ListMusic,
   KeyRound,
   Database,
   Layers,
@@ -22,19 +21,19 @@ import { AppLink } from "./Router";
 const navigation = [
   { path: "/", label: "Přehled", icon: Home },
   { path: "/udalosti", label: "Akce", icon: CalendarDays },
+  { path: "/texty", label: "Texty", icon: Layers },
   { path: "/body", label: "Body", icon: Medal },
   { path: "/clenove", label: "Členové", icon: UsersRound },
 ];
 
 const settingsNavigation = [
   { path: "/nastaveni/sezony", label: "Sezóny", icon: CalendarDays },
-  { path: "/nastaveni/pasma", label: "Pásma", icon: Layers },
-  { path: "/nastaveni/pisne", label: "Písně", icon: ListMusic },
   { path: "/nastaveni/pristupy", label: "Přístupy", icon: KeyRound },
   { path: "/nastaveni/data", label: "Data", icon: Database },
 ];
 
 function pathIsActive(currentPath: string, path: string) {
+  if (path === "/texty" && /^\/(pasma|pisne)\//.test(currentPath)) return true;
   if (path === "/") return currentPath === "/";
   return currentPath === path || currentPath.startsWith(`${path}/`);
 }

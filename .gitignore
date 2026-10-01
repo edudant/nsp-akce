@@ -7,3 +7,6 @@ coverage
 *.tsbuildinfo
 .vite
 supabase/.temp/
+
+# Private repertoire imports (source texts and casting notes)
+.local/

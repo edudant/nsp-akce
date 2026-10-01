@@ -133,6 +133,8 @@ export interface SongCategory {
 }
 export interface Song {
   id: string;
+  kind?: "song" | "carol";
+  hasText?: boolean;
   name: string;
   categoryId?: string;
   active: boolean;

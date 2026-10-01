@@ -249,7 +249,10 @@ export const appApiV3: AppApi = {
     }));
   },
   async saveSong(input) {
-    await mutate("song", { ...input, categoryId: input.categoryId ?? null });
+    const { error } = await requireSupabase().rpc("save_repertoire_song", {
+      song: { ...input, kind: input.kind ?? "song", categoryId: input.categoryId ?? null },
+    });
+    if (error) throw error;
   },
   async saveSongCategory(input) {
     await mutate("category", input);

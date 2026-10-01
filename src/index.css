@@ -7044,3 +7044,58 @@ tbody tr:hover {
 .bulk-picker__options { display: grid; gap: 6px; max-height: 340px; overflow-y: auto; }
 .bulk-picker__options label { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
 .bulk-picker__options input[type="checkbox"] { width: 18px; height: 18px; flex-shrink: 0; }
+
+.program-text-link { justify-content: space-between; text-decoration: none; color: inherit; }
+/* A compact script sheet: lyrics and italic directions follow the Word layout. */
+.program-reader {
+  max-width: 58rem;
+  padding: 1.5rem 2rem;
+  font-family: inherit;
+  font-size: 18px;
+  line-height: 1.55;
+  color: #222;
+  container-type: inline-size;
+}
+.program-block { margin: .85em 0 0; overflow-wrap: anywhere; }
+.program-block:first-child { margin-top: 0; }
+.program-block--continued { margin-top: 0; }
+.program-block p { white-space: pre-wrap; margin: 0; }
+.program-block strong { font-weight: 700; }
+.program-block h2 {
+  font: bold 1.1em/1.3 "Times New Roman", Times, serif;
+  margin: 0 0 .35em;
+  text-align: center;
+  color: inherit;
+}
+.program-block--subtitle { text-align: center; margin-top: 0; }
+.program-block--note, .program-inline-note {
+  font-size: max(13px, .86em);
+  line-height: 1.4;
+  font-style: italic;
+  color: #4b4b4b;
+}
+.program-block--dialogue { font-size: .95em; }
+.program-inline-note { white-space: pre-wrap; margin-top: .15em; }
+.program-source-note { font-size: .85rem; }
+@container (min-width: 600px) {
+  .program-block--annotated { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 1.5rem; align-items: baseline; }
+  .program-inline-note { margin-top: 0; }
+  .program-block--note.program-block--annotated { grid-template-columns: minmax(0, 8rem) minmax(0, 1fr); }
+}
+.program-editor { border: 0; padding: 0; min-width: 0; }
+.program-editor-block { display: grid; gap: .5rem; padding-block: 1rem; border-bottom: 1px solid #dedbd2; }
+.program-editor-block textarea { width: 100%; min-width: 0; font: inherit; line-height: 1.5; }
+@media (max-width: 600px) { .program-reader { padding: 1rem; } }
+.program-reader-controls label { display: inline-flex; align-items: center; gap: .5rem; }
+.program-reader-controls input[type="checkbox"] { width: 20px; height: 20px; min-width: 20px; margin: 0; }
+.program-source-note { overflow-wrap: anywhere; }
+
+.program-reader-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.5rem; margin: 0 0 1rem; }
+.program-reader-controls .program-text-size { display: grid; gap: .3rem; flex: 1 1 150px; max-width: 230px; }
+.program-text-size > span { display: flex; justify-content: space-between; gap: .75rem; font-size: .8rem; color: var(--text-muted, #526579); }
+.program-reader-controls input[type="range"] { width: 100%; min-width: 0; height: 24px; padding: 0; border: 0; background: transparent; box-shadow: none; accent-color: var(--primary, #345879); }
+@media (max-width: 600px) {
+  .program-reader-controls { gap: .7rem 1rem; }
+  .program-reader-controls .program-notes-toggle { font-size: .85rem; }
+  .program-reader { padding: 1.1rem 1rem; }
+}

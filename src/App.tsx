@@ -22,6 +22,10 @@ import { MembersPage } from "./pages/MembersPage";
 import { ScoresPage } from "./pages/ScoresPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
+import { SongTextPage } from "./pages/SongTextPage";
+import { TextsPage } from "./pages/TextsPage";
+import { ProgramTextPage } from "./pages/ProgramTextPage";
+
 export default function App() {
   const route = useRoute();
   const [session, setSession] = useState<SessionUser | null>(null);
@@ -131,6 +135,8 @@ export default function App() {
   const displayedSession: SessionUser = memberPreview
     ? { ...session, role: "member", accessMode: "member" }
     : session;
+  const songRoute = matchRoute(route, "/pisne/:id");
+  const programRoute = matchRoute(route, "/pasma/:id");
   const eventRoute = matchRoute(route, "/udalosti/:id");
 
   let page;
@@ -162,14 +168,19 @@ export default function App() {
         }}
       />
     );
+  } else if (/^\/texty(?:\/(pasma|pisne|koledy))?$/.test(route) || route === "/pasma") {
+    page = <TextsPage key={route} section={(route.split("/")[2] || "pasma") as "pasma" | "pisne" | "koledy"} canEdit={canAdmin} />;
+  } else if (programRoute?.id) {
+    page = <ProgramTextPage key={programRoute.id} id={programRoute.id} canEdit={canAdmin} />;
+  } else if (songRoute?.id) {
+    page = <SongTextPage key={songRoute.id} id={songRoute.id} canEdit={canAdmin} />;
   } else if (route === "/body") {
     page = <ScoresPage />;
-
   } else if (route === "/clenove" && canRecord) {
     page = <MembersPage canEdit={canAdmin} />;
   } else if (
     (route === "/nastaveni" ||
-      /^\/nastaveni\/(sezony|pasma|pisne|pristupy|data)$/.test(route)) &&
+      /^\/nastaveni\/(sezony|pristupy|data)$/.test(route)) &&
     canAdmin
   ) {
     page = (

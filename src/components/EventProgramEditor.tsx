@@ -7,6 +7,7 @@ import type {
   PairingBlock,
   ProgramCatalogItem,
 } from "../lib/domain";
+import { AppLink } from "./Router";
 interface EditableEventProgramItem {
   key: string;
   persistedId?: string;
@@ -130,7 +131,7 @@ export function EventProgramEditor({
         {originalItems.map((item, index) => (
           <div className="compact-row compact-row--readonly" key={item.key}>
             <span className="compact-row__title">
-              {index + 1}. {item.name}
+              {index + 1}. {item.catalogId ? <AppLink to={`/pasma/${item.catalogId}`}>{item.name}</AppLink> : item.name}
             </span>
             <span className="compact-row__quick">
               <IconButton

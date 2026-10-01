@@ -6,12 +6,10 @@ import {
   EyeOff,
   KeyRound,
   RefreshCcw,
-  Save,
 } from "lucide-react";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
-  ProgramCatalogItem,
   SessionUser,
   Member,
   AppRole,
@@ -23,15 +21,13 @@ import { ErrorState, LoadingState } from "../components/DataStates";
 import { formatDate } from "../components/formatters";
 import { PageHeader } from "../components/PageHeader";
 import { Badge, Button, Card, Dialog, Field, Select } from "../components/Ui";
-import { SeasonsPanel, SongsSettings } from "../components/FeatureSettings";
+import { SeasonsPanel } from "../components/FeatureSettings";
 import { ListHeader, ListRow } from "../components/CompactList";
 import { MemberLoginCode } from "../components/MemberLoginCode";
 import { Help } from "../components/Help";
 
 const sectionTitles: Record<string, string> = {
   sezony: "Sezóny",
-  pasma: "Pásma",
-  pisne: "Písně",
   pristupy: "Přístupy",
   data: "Data",
 };
@@ -66,13 +62,6 @@ export function SettingsPage({
         description="Správa souboru. Vyberte položku ze seznamu a otevřete její detail."
       />
       {section === "sezony" && <SeasonsPanel canEdit={canEdit} />}
-      {section === "pisne" && <SongsSettings canEdit={canEdit} />}
-      {section === "pasma" && (
-        <ProgramCatalogSettings
-          canEdit={canEdit}
-          items={db.programCatalog ?? []}
-        />
-      )}
       {section === "pristupy" && (
         <>
           <AccountsSettings members={db.members} canEdit={canEdit} />
@@ -117,140 +106,6 @@ function SettingsCard({
         <p>{description}</p>
       </header>
       <div className="settings-card__body">{children}</div>
-    </Card>
-  );
-}
-function ProgramCatalogSettings({
-  canEdit,
-  items,
-}: {
-  canEdit: boolean;
-  items: ProgramCatalogItem[];
-}) {
-  const query = useQueryClient();
-  const initial: Omit<ProgramCatalogItem, "id"> & { id?: string } = {
-    name: "",
-    active: true,
-    sortOrder: Math.max(0, ...items.map((i) => i.sortOrder)) + 10,
-  };
-  const [draft, setDraft] = useState(initial);
-  const [editing, setEditing] = useState(false);
-  const [search, setSearch] = useState("");
-  const save = useMutation({
-    mutationFn: appApi.saveProgramCatalogItem,
-    onSuccess: async () => {
-      await query.invalidateQueries({ queryKey: databaseQueryKey });
-      setEditing(false);
-    },
-  });
-  return (
-    <Card className="feature-card">
-      <ListHeader
-        title="Pásma"
-        addLabel="Nové pásmo"
-        onAdd={
-          canEdit
-            ? () => {
-                setDraft(initial);
-                setEditing(true);
-              }
-            : undefined
-        }
-      />
-      <Help>
-        <p>
-          Pásma se nabízejí v programu tanečního vystoupení. Skrytí pásma
-          zachová historický program; jednorázový název můžete zadat přímo na
-          akci.
-        </p>
-      </Help>
-      <input
-        className="list-search"
-        aria-label="Hledat pásmo"
-        placeholder="Hledat pásmo…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-      <div className="compact-list">
-        {items
-          .slice()
-          .sort(
-            (a, b) =>
-              a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "cs"),
-          )
-          .filter((i) =>
-            i.name
-              .toLocaleLowerCase("cs")
-              .includes(search.toLocaleLowerCase("cs")),
-          )
-          .map((i) => (
-            <ListRow
-              key={i.id}
-              title={i.name}
-              subtitle={`Pořadí ${i.sortOrder}`}
-              meta={
-                <Badge tone={i.active ? "green" : undefined}>
-                  {i.active ? "Aktivní" : "Skryté"}
-                </Badge>
-              }
-              onOpen={() => {
-                setDraft(i);
-                setEditing(true);
-              }}
-            />
-          ))}
-      </div>
-      <Dialog
-        open={editing}
-        title={draft.id ? "Detail pásma" : "Nové pásmo"}
-        onClose={() => setEditing(false)}
-      >
-        <form
-          className="dialog-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            save.mutate(draft);
-          }}
-        >
-          <Field label="Název pásma">
-            <input
-              aria-label="Název pásma"
-              required
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            />
-          </Field>
-          <Field label="Pořadí">
-            <input
-              aria-label="Pořadí pásma"
-              type="number"
-              min="0"
-              required
-              value={draft.sortOrder}
-              onChange={(e) =>
-                setDraft({ ...draft, sortOrder: Number(e.target.value) })
-              }
-            />
-          </Field>
-          <label>
-            <input
-              type="checkbox"
-              checked={draft.active}
-              onChange={(e) => setDraft({ ...draft, active: e.target.checked })}
-            />{" "}
-            Nabízet na nových akcích
-          </label>
-          <Button type="submit" disabled={!canEdit} loading={save.isPending}>
-            <Save aria-hidden="true" />
-            Uložit pásmo
-          </Button>
-          {save.error && (
-            <p role="alert" className="form-error">
-              {save.error.message}
-            </p>
-          )}
-        </form>
-      </Dialog>
     </Card>
   );
 }
