@@ -1,13 +1,10 @@
-import { useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { appApi } from "../lib/dataApi";
-import { useDatabase, databaseQueryKey } from "../components/DataContext";
-import { ErrorState, LoadingState } from "../components/DataStates";
-import { PageHeader } from "../components/PageHeader";
-import { Button, Card, Select } from "../components/Ui";
-import { Help } from "../components/Help";
-import { AttendancePanel } from "../components/AttendancePanel";
-import { AppLink, navigate } from "../components/Router";
+import { databaseQueryKey } from "./DataContext";
+import { Button, Card, Select } from "./Ui";
+import { Help } from "./Help";
+import { formatDate, todayInPrague } from "./formatters";
 import {
   pairingParticipants,
   defaultTuning,
@@ -15,92 +12,35 @@ import {
   type PairingTuning,
 } from "../lib/seasonPairing";
 import { generatePairsAsync } from "../lib/pairingClient";
-import { PairingRoster } from "../components/PairingRoster";
+import { PairingRoster } from "./PairingRoster";
 import type { AppDatabase, EnsembleEvent, DancePair } from "../lib/domain";
-function readPairingEventId() {
-  return (
-    new URLSearchParams(window.location.hash.split("?")[1] ?? "").get(
-      "event",
-    ) ?? ""
-  );
-}
-function subscribePairingEvent(callback: () => void) {
-  window.addEventListener("hashchange", callback);
-  window.addEventListener("popstate", callback);
-  return () => {
-    window.removeEventListener("hashchange", callback);
-    window.removeEventListener("popstate", callback);
-  };
-}
-export function PairingPage({ canEdit }: { canEdit: boolean }) {
-  const db = useDatabase();
-  const eventId = useSyncExternalStore(
-    subscribePairingEvent,
-    readPairingEventId,
-    () => "",
-  );
-  if (db.isLoading) return <LoadingState />;
-  if (db.isError || !db.data)
-    return <ErrorState onRetry={() => void db.refetch()} />;
-  const events = db.data.events.filter(
-    (e) => e.seasonKind !== "carols" && e.status !== "cancelled",
-  );
-  const event = events.find((e) => e.id === eventId) ?? events[0];
-  return (
-    <div className="page">
-      <PageHeader
-        title="Taneční páry"
-        description="Návrh, ruční úpravy a zveřejnění sestavy."
-      />
-      <Select
-        aria-label="Akce pro párování"
-        value={event?.id ?? ""}
-        onChange={(e) =>
-          navigate(`/pary?event=${encodeURIComponent(e.target.value)}`)
-        }
-      >
-        {events.map((e) => (
-          <option value={e.id} key={e.id}>
-            {e.date} · {e.title}
-          </option>
-        ))}
-      </Select>
-      {event ? (
-        <PairingEditor
-          key={event.id}
-          db={db.data}
-          event={event}
-          admin={canEdit}
-        />
-      ) : (
-        <p>Žádné taneční akce.</p>
-      )}
-    </div>
-  );
-}
-function PairingEditor({
+export function EventPairingEditor({
   db,
   event,
   admin,
+  onSaved,
 }: {
   db: AppDatabase;
   event: EnsembleEvent;
   admin: boolean;
+  onSaved?: () => void;
 }) {
   const query = useQueryClient();
   const [tuning, setTuning] = useState(defaultTuning);
   const [draft, setDraft] = useState<DancePair[] | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [name, setName] = useState(formatDate(todayInPrague(), "d. M. yyyy"));
   const [message, setMessage] = useState("");
   const pairs = draft ?? event.pairs;
   const error = validatePairs(db, event, pairs);
   const save = useMutation({
     mutationFn: (published: boolean) =>
-      appApi.savePairs(event.id, pairs, published),
+      appApi.savePairs(event.id, pairs, published, [], name),
     onSuccess: async (_, published) => {
       await query.invalidateQueries({ queryKey: databaseQueryKey });
       setDraft(null);
-      setMessage(published ? "Páry jsou zveřejněné." : "Návrh je uložený.");
+      setMessage(published ? "Sada je uložená." : "Návrh je uložený.");
+      onSaved?.();
     },
   });
   const selection = useMutation({
@@ -138,7 +78,6 @@ function PairingEditor({
     <>
       {admin && (
         <>
-          <AttendancePanel db={db} event={event} admin />
           <Card className="feature-card">
             <h2>
               {event.type === "rehearsal"
@@ -308,47 +247,36 @@ function PairingEditor({
         />
         {admin && (
           <>
-            <Help title="Uložení a zveřejnění">
-              <p>
-                Uložený návrh vystoupení vidí pouze admin. Zveřejněním ho
-                zpřístupníte všem. U zkoušky lze uložit více samostatných sad a
-                zveřejnit každou z nich; další sada nepřepíše předchozí.
-              </p>
-            </Help>
+            <label className="field">
+              Název sady (volitelný)
+              <input
+                aria-label="Název sady"
+                maxLength={120}
+                value={name}
+                placeholder={formatDate(todayInPrague(), "d. M. yyyy")}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </label>
+            <p className="pairing-hint">
+              Uloženou sadu uvidí členové v této akci.
+            </p>
             {error && (
               <p role="alert" className="form-error">
                 {error}
               </p>
             )}
             <div className="feature-toolbar">
-              {event.type === "performance" && (
-                <Button
-                  disabled={
-                    !!error ||
-                    (pairs.length === 0 && draft === null) ||
-                    generate.isPending ||
-                    selection.isPending
-                  }
-                  loading={save.isPending}
-                  variant="secondary"
-                  onClick={() => save.mutate(false)}
-                >
-                  Uložit návrh
-                </Button>
-              )}
               <Button
                 disabled={
                   !!error ||
-                  pairs.length === 0 ||
+                  (pairs.length === 0 && selected.length === 0) ||
                   generate.isPending ||
                   selection.isPending
                 }
                 loading={save.isPending}
                 onClick={() => save.mutate(true)}
               >
-                {event.type === "rehearsal"
-                  ? "Uložit a zveřejnit sadu"
-                  : "Zveřejnit schválené páry"}
+                Uložit
               </Button>
             </div>
           </>
@@ -358,9 +286,6 @@ function PairingEditor({
             {save.error?.message ?? selection.error?.message}
           </p>
         )}
-        <AppLink to={`/udalosti/${event.id}`}>
-          Detail akce a uložené sady
-        </AppLink>
       </Card>
     </>
   );

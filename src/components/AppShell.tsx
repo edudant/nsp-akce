@@ -11,7 +11,6 @@ import {
   KeyRound,
   Database,
   Layers,
-  Sparkles,
   UsersRound,
   X,
 } from "lucide-react";
@@ -23,7 +22,6 @@ import { AppLink } from "./Router";
 const navigation = [
   { path: "/", label: "Přehled", icon: Home },
   { path: "/udalosti", label: "Akce", icon: CalendarDays },
-  { path: "/pary", label: "Páry", icon: Sparkles },
   { path: "/body", label: "Body", icon: Medal },
   { path: "/clenove", label: "Členové", icon: UsersRound },
 ];

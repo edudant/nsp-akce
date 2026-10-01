@@ -1,4 +1,8 @@
 import { useState } from "react";
+import { Plus } from "lucide-react";
+import { EventPairingEditor } from "../components/EventPairingEditor";
+import { PairingRoster } from "../components/PairingRoster";
+import { ListHeader } from "../components/CompactList";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { appApi } from "../lib/dataApi";
 import { useDatabase, databaseQueryKey } from "../components/DataContext";
@@ -11,6 +15,7 @@ import {
   EventStatusBadge,
   EventTypeBadge,
   Select,
+  IconButton,
 } from "../components/Ui";
 import { AuditDisclosure } from "../components/EventAudit";
 import { EventStateActions } from "../components/EventStateActions";
@@ -21,7 +26,11 @@ import { EventProgramEditor } from "../components/EventProgramEditor";
 import { SongSeriesPanel } from "../components/SongSeriesPanel";
 import { AppLink } from "../components/Router";
 import { compatibleMembers } from "../lib/ensembleRules";
-import { formatDate, formatAuditTime } from "../components/formatters";
+import {
+  formatDate,
+  formatAuditTime,
+  formatSetDate,
+} from "../components/formatters";
 import { ResponseBadge } from "../components/Participation";
 import { canRespondToEvent, eventHasStarted } from "../lib/memberPortal";
 import { todayInPrague } from "../components/formatters";
@@ -32,7 +41,6 @@ import type {
   InterestStatus,
   EventStatus,
   EventProgramUpdateItem,
-  DancePair,
 } from "../lib/domain";
 export function EventDetailPage({
   eventId,
@@ -79,8 +87,9 @@ function EventContent({
   const query = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [section, setSection] = useState<
-    "detail" | "participants" | "pairs" | "program"
+    "detail" | "participants" | "pairs" | "program" | "songs"
   >("detail");
+  const [pairing, setPairing] = useState(false);
   const [pairSetId, setPairSetId] = useState("");
   const [wishes, setWishes] = useState(
     (db.partnerWishes ?? [])
@@ -150,19 +159,18 @@ function EventContent({
   const hasPairs =
     dance &&
     (event.type === "rehearsal"
-      ? pairSets.some((s) => s.pairs.length)
-      : event.pairs.length > 0);
-  const hasProgram = !!(
-    event.programItems?.length ||
-    event.program ||
-    event.songSeries?.some((s) => s.confirmed)
-  );
+      ? pairSets.length > 0
+      : event.pairs.length > 0 || event.pairsPublished);
+  const hasProgram = !!(event.programItems?.length || event.program);
   const sections = [
     ...(event.attendanceScope === "all"
       ? [{ id: "participants", label: "Účastníci" }]
       : []),
     ...(hasPairs || (admin && dance) ? [{ id: "pairs", label: "Páry" }] : []),
-    ...(admin || hasProgram ? [{ id: "program", label: "Pásma a písně" }] : []),
+    ...(admin || hasProgram ? [{ id: "program", label: "Pásma" }] : []),
+    ...(admin || event.songSeries?.some((s) => s.confirmed)
+      ? [{ id: "songs", label: "Písně" }]
+      : []),
   ];
   const activeSection = sections.some((s) => s.id === section)
     ? section
@@ -184,7 +192,7 @@ function EventContent({
         <div className="event-hero__copy">
           <PageHeader
             title={event.title}
-            description={`${formatDate(event.date)} · ${event.startTime}–${event.endTime} · ${event.location}`}
+            description={`${formatDate(event.date)}${activeSection === "pairs" ? "" : ` · ${event.startTime}–${event.endTime}`} · ${event.location}`}
           />
           {event.note && <p className="event-hero__note">{event.note}</p>}
         </div>
@@ -215,14 +223,6 @@ function EventContent({
               onChange={(value) => status.mutate(value)}
             />
           </>
-        )}
-        {canPair && dance && (
-          <AppLink
-            className="button button--secondary"
-            to={`/pary?event=${event.id}`}
-          >
-            Generátor párů
-          </AppLink>
         )}
       </div>
       {
@@ -408,13 +408,35 @@ function EventContent({
       )}
       {activeSection === "pairs" && dance && (
         <section role="tabpanel" id="panel-pairs" aria-labelledby="tab-pairs">
-          {dance && (
+          {canPair && admin && (
+            <div className="compact-list__header">
+              <span />
+              {pairing ? (
+                <Button variant="secondary" onClick={() => setPairing(false)}>
+                  Zpět na sady
+                </Button>
+              ) : (
+                <IconButton
+                  label="Přidat sadu párů"
+                  onClick={() => setPairing(true)}
+                >
+                  <Plus aria-hidden="true" />
+                </IconButton>
+              )}
+            </div>
+          )}
+          {pairing && admin ? (
+            <EventPairingEditor
+              db={db}
+              event={event}
+              admin
+              onSaved={() => {
+                setPairing(false);
+                setPairSetId("");
+              }}
+            />
+          ) : (
             <Card className="feature-card">
-              <h2>
-                {event.type === "rehearsal"
-                  ? "Uložené sady párů"
-                  : "Páry pro vystoupení"}
-              </h2>
               {event.type === "rehearsal" ? (
                 <>
                   {pairSets.length > 1 && (
@@ -426,25 +448,57 @@ function EventContent({
                       {pairSets.map((set, index) => (
                         <option key={set.id} value={set.id}>
                           {index === 0 ? "Poslední · " : ""}
-                          {set.name} · {formatAuditTime(set.createdAt)}
+                          {set.name}
                         </option>
                       ))}
                     </Select>
                   )}
-                  {selectedPairSet && (
+                  {selectedPairSet ? (
                     <section>
-                      <h3>
-                        {selectedPairSet.name} ·{" "}
-                        {formatAuditTime(selectedPairSet.createdAt)}
-                      </h3>
-                      <PairsList pairs={selectedPairSet.pairs} db={db} />
+                      <h3>{selectedPairSet.name}</h3>
+                      {selectedPairSet.name !==
+                        formatSetDate(selectedPairSet.createdAt) && (
+                        <p>
+                          <time dateTime={selectedPairSet.createdAt}>
+                            {formatSetDate(selectedPairSet.createdAt)}
+                          </time>
+                        </p>
+                      )}
+                      <PairingRoster
+                        db={db}
+                        event={event}
+                        pairs={selectedPairSet.pairs}
+                        roster={selectedPairSet.roster}
+                        admin={false}
+                        disabled={false}
+                        onChange={() => {}}
+                      />
                     </section>
+                  ) : (
+                    <p>Zatím žádná sada.</p>
                   )}
-                  {!event.pairSets?.length && <p>Zatím žádná sada.</p>}
                 </>
               ) : (
                 <>
-                  <PairsList pairs={event.pairs} db={db} />
+                  {event.pairingName && <h3>{event.pairingName}</h3>}
+                  {event.pairingCreatedAt &&
+                    event.pairingName !==
+                      formatSetDate(event.pairingCreatedAt) && (
+                      <p>
+                        <time dateTime={event.pairingCreatedAt}>
+                          {formatSetDate(event.pairingCreatedAt)}
+                        </time>
+                      </p>
+                    )}
+                  <PairingRoster
+                    db={db}
+                    event={event}
+                    pairs={event.pairs}
+                    roster={event.pairingRoster}
+                    admin={false}
+                    disabled={false}
+                    onChange={() => {}}
+                  />
                   {admin &&
                     event.status === "closed" &&
                     event.pairsPublished &&
@@ -458,11 +512,10 @@ function EventContent({
                     )}
                   <Help title="Skutečně odtančené páry">
                     <p>
-                      Zveřejněný návrh ještě není skutečná historie. Po
-                      vystoupení upravte sestavu a skutečnou účast, poté
+                      Po vystoupení upravte sestavu a skutečnou účast, poté
                       potvrďte, kdo skutečně tančil. Páry pod čarou se
                       nepotvrzují automaticky. Zkouškové sady se do historie
-                      nikdy nezapočítávají.
+                      nezapočítávají.
                     </p>
                   </Help>
                 </>
@@ -477,41 +530,41 @@ function EventContent({
           id="panel-program"
           aria-labelledby="tab-program"
         >
-          {(admin || !!event.programItems?.length || !!event.program) && (
+          {admin ? (
+            <EventProgramEditor
+              key={JSON.stringify(event.programItems)}
+              items={event.programItems ?? []}
+              catalog={db.programCatalog ?? []}
+              eventBlocks={[]}
+              pairsPublished={event.pairsPublished}
+              loading={program.isPending}
+              error={program.error?.message}
+              onSave={(items) => program.mutateAsync(items).then(() => {})}
+            />
+          ) : (
             <Card className="feature-card">
-              <h2>Program</h2>
-              {admin ? (
-                <EventProgramEditor
-                  key={JSON.stringify(event.programItems)}
-                  items={event.programItems ?? []}
-                  catalog={db.programCatalog ?? []}
-                  eventBlocks={[]}
-                  pairsPublished={event.pairsPublished}
-                  loading={program.isPending}
-                  error={program.error?.message}
-                  onSave={(items) => program.mutate(items)}
-                />
-              ) : (
-                <p>
-                  {event.programItems?.map((p) => p.name).join(", ") ||
-                    event.program ||
-                    "Neuveden"}
-                </p>
+              <ListHeader title="Pásma" />
+              <div className="compact-list">
+                {event.programItems?.map((item) => (
+                  <div
+                    className="compact-row compact-row--readonly"
+                    key={item.id}
+                  >
+                    {item.name}
+                  </div>
+                ))}
+              </div>
+              {!event.programItems?.length && (
+                <p>{event.program || "Zatím žádná pásma."}</p>
               )}
             </Card>
           )}
-          {event.singing &&
-            (admin || !!event.songSeries?.some((s) => s.confirmed)) && (
-              <SongSeriesPanel db={db} event={event} admin={admin} />
-            )}
-          {admin && !event.singing && (
-            <Button
-              variant="secondary"
-              loading={saveEvent.isPending}
-              onClick={() => saveEvent.mutate({ singing: true })}
-            >
-              Zapnout zpívání a série písní
-            </Button>
+        </section>
+      )}
+      {activeSection === "songs" && (
+        <section role="tabpanel" id="panel-songs" aria-labelledby="tab-songs">
+          {(admin || !!event.songSeries?.some((s) => s.confirmed)) && (
+            <SongSeriesPanel db={db} event={event} admin={admin} />
           )}
         </section>
       )}
@@ -540,22 +593,6 @@ function EventContent({
           />
         </Dialog>
       )}
-    </div>
-  );
-}
-function PairsList({ pairs, db }: { pairs: DancePair[]; db: AppDatabase }) {
-  return (
-    <div className="feature-list">
-      {pairs.map((pair) => (
-        <div key={pair.id}>
-          {db.members.find((m) => m.id === pair.leaderId)?.fullName} +{" "}
-          {db.members.find((m) => m.id === pair.followerId)?.fullName} ·{" "}
-          {pair.ageGroup === "young" ? "Mladý" : "Starý"}
-          {pair.belowLine ? " · Pod čarou" : ""}
-          {pair.actual ? " · Skutečně tančili" : ""}
-        </div>
-      ))}
-      {pairs.length === 0 && <p>Páry zatím nejsou zveřejněné.</p>}
     </div>
   );
 }

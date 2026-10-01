@@ -50,3 +50,12 @@ export function formatAuditTime(at?: string | null) {
       }).format(new Date(at))
     : "";
 }
+
+export function formatSetDate(at: string) {
+  return new Intl.DateTimeFormat("cs-CZ", {
+    timeZone: "Europe/Prague",
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+  }).format(new Date(at));
+}

@@ -5,9 +5,17 @@ export type ExperienceLevel = "beginner" | "advanced" | "experienced";
 export type AgeGroup = "young" | "old";
 export type EventType = "rehearsal" | "performance";
 export type EventStatus =
-  "draft" | "open" | "confirmed" | "closed" | "cancelled";
+  | "draft"
+  | "open"
+  | "confirmed"
+  | "closed"
+  | "cancelled";
 export type AttendanceStatus =
-  "present" | "partial" | "absent" | "excused" | "unknown";
+  | "present"
+  | "partial"
+  | "absent"
+  | "excused"
+  | "unknown";
 export type InterestStatus = "yes" | "no" | "maybe" | "substitute" | "unset";
 
 export interface MemberAccount {
@@ -135,12 +143,20 @@ export interface SongSeries {
   songIds: string[];
   confirmed: boolean;
 }
+export interface PairingRosterEntry {
+  memberId: string;
+  standing: boolean;
+  fullName?: string;
+  role?: Member["role"];
+  ageGroups?: AgeGroup[];
+}
 export interface PairSet {
   id: string;
   name: string;
   createdAt: string;
   pairs: DancePair[];
   published: boolean;
+  roster?: PairingRosterEntry[];
 }
 export interface ScoreFilter {
   seasonId?: string;
@@ -182,6 +198,9 @@ export interface EnsembleEvent {
   singing?: boolean;
   songSeries?: SongSeries[];
   pairSets?: PairSet[];
+  pairingRoster?: PairingRosterEntry[];
+  pairingName?: string;
+  pairingCreatedAt?: string;
   actualPairs?: DancePair[];
 }
 
@@ -308,6 +327,7 @@ export interface AppApi {
     pairs: DancePair[],
     published?: boolean,
     blocks?: PairingBlock[],
+    name?: string,
   ): Promise<EnsembleEvent>;
   updateEventStatus(
     eventId: string,

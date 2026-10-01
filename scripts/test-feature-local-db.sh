@@ -19,3 +19,4 @@ docker exec "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "gra
 
 docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$root/supabase/tests/feature_legacy_migration_test.sql"
 docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$root/supabase/tests/bulk_attendance_test.sql"
+docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$root/supabase/tests/event_pair_sets_test.sql"

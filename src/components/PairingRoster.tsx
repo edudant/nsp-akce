@@ -4,6 +4,7 @@ import type {
   DancePair,
   EnsembleEvent,
   Member,
+  PairingRosterEntry,
 } from "../lib/domain";
 import { memberGroups } from "../lib/ensembleRules";
 import { pairingParticipants, validatePairs } from "../lib/seasonPairing";
@@ -16,6 +17,7 @@ export function PairingRoster({
   admin,
   disabled,
   onChange,
+  roster,
 }: {
   db: AppDatabase;
   event: EnsembleEvent;
@@ -23,11 +25,28 @@ export function PairingRoster({
   admin: boolean;
   disabled: boolean;
   onChange: (pairs: DancePair[]) => void;
+  roster?: PairingRosterEntry[];
 }) {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [newMemberId, setNewMemberId] = useState<string | null>(null);
   const [partnerId, setPartnerId] = useState("");
-  const selected = pairingParticipants(db, event);
+  const selected: Member[] = roster
+    ? roster.map((entry) => {
+        const member = db.members.find((m) => m.id === entry.memberId);
+        return {
+          shortName: "",
+          active: false,
+          experience: "beginner",
+          joinedAt: "",
+          ...member,
+          id: entry.memberId,
+          fullName: entry.fullName ?? member?.fullName ?? "Neznámý člen",
+          role: entry.role ?? member?.role ?? "leader",
+          ageGroups: entry.ageGroups ?? member?.ageGroups,
+          ageGroup: entry.ageGroups?.[0] ?? member?.ageGroup ?? null,
+        };
+      })
+    : pairingParticipants(db, event);
   const used = new Set(
     pairs.flatMap((pair) => [pair.leaderId, pair.followerId]),
   );
@@ -37,13 +56,20 @@ export function PairingRoster({
   const detail = pairs.find((pair) => pair.id === detailId);
   const newMember = selected.find((member) => member.id === newMemberId);
   const name = (id: string) =>
-    db.members.find((member) => member.id === id)?.fullName ?? "Neznámý člen";
+    (
+      selected.find((member) => member.id === id) ??
+      db.members.find((member) => member.id === id)
+    )?.fullName ?? "Neznámý člen";
   const groups = (id: string) => {
-    const member = db.members.find((candidate) => candidate.id === id);
+    const member =
+      selected.find((candidate) => candidate.id === id) ??
+      db.members.find((candidate) => candidate.id === id);
     return member ? memberGroups(member) : [];
   };
   const standing = (id: string) =>
-    !!event.attendance.find((record) => record.memberId === id)?.standing;
+    roster
+      ? !!roster.find((entry) => entry.memberId === id)?.standing
+      : !!event.attendance.find((record) => record.memberId === id)?.standing;
   const currentPair = (id: string) =>
     pairs.find((pair) => pair.leaderId === id || pair.followerId === id);
   const partnerName = (member: Member) => {
@@ -240,7 +266,7 @@ export function PairingRoster({
       {admin && (
         <p className="pairing-hint">
           Kliknutím na pár otevřete detail. Členovi bez páru vyberete partnera
-          kliknutím na jeho jméno. Úpravy uložte nebo zveřejněte pod tabulkou.
+          kliknutím na jeho jméno. Úpravy uložte pod tabulkou.
         </p>
       )}
       <Dialog

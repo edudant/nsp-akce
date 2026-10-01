@@ -223,9 +223,7 @@ try {
     0,
   );
   assert.equal(
-    await member
-      .getByRole("tab", { name: "Pásma a písně", exact: true })
-      .count(),
+    await member.getByRole("tab", { name: "Písně", exact: true }).count(),
     0,
   );
   await member
@@ -290,9 +288,8 @@ try {
     .getByRole("button", { name: /Přidat vybrané/ })
     .click();
   await admin.getByRole("dialog").waitFor({ state: "hidden" });
-  await admin
-    .getByRole("link", { name: "Generátor párů", exact: true })
-    .click();
+  await admin.getByRole("tab", { name: "Páry", exact: true }).click();
+  await admin.getByRole("button", { name: "Přidat sadu párů" }).click();
   await admin.getByRole("button", { name: "Vygenerovat návrh" }).waitFor();
   for (const label of ["Preference", "Body", "Střídání", "Zkušenost"])
     assert.equal(
@@ -315,39 +312,24 @@ try {
   await belowLine.setChecked(!originallyBelow);
   await belowLine.setChecked(originallyBelow);
   await admin.getByRole("button", { name: "Hotovo", exact: true }).click();
-  await admin
-    .getByRole("button", { name: "Uložit návrh", exact: true })
-    .click();
-  await admin.getByText("Návrh je uložený.", { exact: true }).waitFor();
-  await admin
-    .getByRole("button", { name: "Zveřejnit schválené páry", exact: true })
-    .click();
-  await admin.getByText("Páry jsou zveřejněné.", { exact: true }).waitFor();
+  await admin.getByRole("button", { name: "Uložit", exact: true }).click();
+  await admin.getByRole("button", { name: "Přidat sadu párů" }).waitFor();
   pass(
-    "Performance sliders, directional wishes, main/below-line pairs, manual editor, draft and publication",
+    "Performance sliders, directional wishes, main/below-line pairs, manual editor and saving a visible set",
   );
   await go(admin, route, title);
-  await admin.getByRole("tab", { name: "Pásma a písně", exact: true }).click();
-  await admin.getByLabel("Název nové série").fill("Browser songs");
-  await admin.getByRole("button", { name: "Vytvořit sérii" }).click();
-  const series = admin.locator(".song-series").filter({
-    has: admin.getByRole("heading", {
-      name: "Browser songs · Návrh",
-      exact: true,
-    }),
-  });
-  await series.waitFor();
-  await series
-    .getByRole("button", { name: "+ Bul jest jeren sedlák", exact: true })
-    .click();
-  await series.getByRole("button", { name: "Uložit návrh série" }).click();
-  await admin.getByLabel("Název série Browser songs").waitFor();
+  await admin.getByRole("tab", { name: "Písně", exact: true }).click();
+  await admin.getByRole("button", { name: "Přidat písně" }).click();
+  await admin.getByLabel("Název série", { exact: true }).fill("Browser songs");
+  await admin
+    .getByRole("checkbox", { name: "Bul jest jeren sedlák", exact: true })
+    .check();
+  await admin.getByRole("button", { name: "Přidat vybrané (1)" }).click();
+  await admin.getByRole("dialog").waitFor({ state: "hidden" });
   await member.reload();
   await member.getByRole("heading", { name: title, exact: true }).waitFor();
   assert.equal(
-    await member
-      .getByRole("tab", { name: "Pásma a písně", exact: true })
-      .count(),
+    await member.getByRole("tab", { name: "Písně", exact: true }).count(),
     0,
   );
   assert.equal(
@@ -355,17 +337,13 @@ try {
     0,
   );
   await admin
-    .locator(".song-series")
-    .getByRole("button", { name: "Potvrdit sérii" })
+    .getByRole("button", { name: "Detail: Bul jest jeren sedlák", exact: true })
     .click();
-  await admin
-    .getByRole("heading", { name: "Browser songs · Potvrzená", exact: true })
-    .waitFor();
+  await admin.getByRole("button", { name: "Potvrdit sérii" }).click();
+  await admin.getByRole("dialog").waitFor({ state: "hidden" });
   await member.reload();
-  await member.getByRole("tab", { name: "Pásma a písně", exact: true }).click();
-  await member
-    .getByRole("heading", { name: "Browser songs · Potvrzená", exact: true })
-    .waitFor();
+  await member.getByRole("tab", { name: "Písně", exact: true }).click();
+  await member.getByText("Browser songs", { exact: true }).waitFor();
   assert.ok(
     !(await member.locator("body").innerText()).includes("PRIVATE TEST NOTE"),
   );
@@ -512,9 +490,8 @@ try {
   pass(
     "Participant detail persists percentage attendance and shows original member/admin audit",
   );
-  await admin
-    .getByRole("link", { name: "Generátor párů", exact: true })
-    .click();
+  await admin.getByRole("tab", { name: "Páry", exact: true }).click();
+  await admin.getByRole("button", { name: "Přidat sadu párů" }).click();
   assert.equal(
     await admin
       .getByLabel("Doplnit Mladé ze Starých s oběma zařazeními")
@@ -527,7 +504,7 @@ try {
     .getByRole("button", { name: /^Detail páru:/ })
     .first()
     .waitFor();
-  await admin.getByRole("button", { name: "Uložit a zveřejnit sadu" }).click();
+  await admin.getByRole("button", { name: "Uložit", exact: true }).click();
   await admin.getByText("Páry jsou zveřejněné.", { exact: true }).waitFor();
   await go(
     member,
@@ -618,10 +595,8 @@ try {
       .count(),
     0,
   );
-  await admin.getByRole("tab", { name: "Pásma a písně", exact: true }).click();
-  await admin
-    .getByRole("heading", { name: "Browser songs · Potvrzená", exact: true })
-    .waitFor();
+  await admin.getByRole("tab", { name: "Písně", exact: true }).click();
+  await admin.getByText("Browser songs", { exact: true }).waitFor();
   await go(admin, "/body", "Bodový přehled");
   await admin.getByLabel("Období bodů").selectOption(fixture.carols);
   await admin.waitForFunction(
@@ -676,10 +651,8 @@ try {
   await shared.getByRole("button", { name: /Otevřít členský přehled/ }).click();
   await shared.locator(".app-layout").waitFor();
   await go(shared, route, title);
-  await shared.getByRole("tab", { name: "Pásma a písně", exact: true }).click();
-  await shared
-    .getByRole("heading", { name: "Browser songs · Potvrzená" })
-    .waitFor();
+  await shared.getByRole("tab", { name: "Písně", exact: true }).click();
+  await shared.getByText("Browser songs", { exact: true }).waitFor();
   assert.equal(
     await shared.getByRole("button", { name: "Upravit akci" }).count(),
     0,
@@ -711,7 +684,13 @@ try {
   });
   pass("Admin desktop and mobile visual checks");
   if (fixture.legacyRehearsal) {
-    await go(admin, "/pary?event=" + fixture.legacyRehearsal, "Taneční páry");
+    await go(
+      admin,
+      "/udalosti/" + fixture.legacyRehearsal,
+      db.events.find((e) => e.id === fixture.legacyRehearsal).title,
+    );
+    await admin.getByRole("tab", { name: "Páry", exact: true }).click();
+    await admin.getByRole("button", { name: "Přidat sadu párů" }).click();
     await admin.getByText(/Páruje se podle zapsané skutečné účasti/).waitFor();
     await admin.getByRole("button", { name: "Vygenerovat návrh" }).click();
     await admin.getByText(/Návrh vytvořen: 1 hlavních párů/).waitFor();
@@ -720,10 +699,8 @@ try {
       .getByRole("button", { name: /^Detail páru:/ })
       .first()
       .waitFor();
-    await admin
-      .getByRole("button", { name: "Uložit a zveřejnit sadu" })
-      .click();
-    await admin.getByText("Páry jsou zveřejněné.", { exact: true }).waitFor();
+    await admin.getByRole("button", { name: "Uložit", exact: true }).click();
+    await admin.getByRole("button", { name: "Přidat sadu párů" }).waitFor();
     await admin.setViewportSize({ width: 390, height: 844 });
     await noOverflow(admin);
     await admin.screenshot({

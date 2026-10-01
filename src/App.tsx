@@ -19,7 +19,6 @@ import { EventDetailPage } from "./pages/EventDetailPage";
 import { EventsPage } from "./pages/EventsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MembersPage } from "./pages/MembersPage";
-import { PairingPage } from "./pages/PairingPage";
 import { ScoresPage } from "./pages/ScoresPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
@@ -165,8 +164,7 @@ export default function App() {
     );
   } else if (route === "/body") {
     page = <ScoresPage />;
-  } else if (route === "/pary") {
-    page = <PairingPage canEdit={canAdmin} />;
+
   } else if (route === "/clenove" && canRecord) {
     page = <MembersPage canEdit={canAdmin} />;
   } else if (

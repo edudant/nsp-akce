@@ -214,3 +214,21 @@ a bulk SQL test v izolovaném PostgreSQL 17 s Auth stubem. Chromium smoke test
 se syntetickými mock daty ověřil bulk request, editaci/vytvoření/zrušení párů,
 uložení odpovědi a procent, desktop i mobilní šířky 390 a 320 px. Docker
 Supabase integration/browser suite nebyla v tomto prostředí spuštěna.
+
+## Páry a program přímo v akci (1. 10. 2026)
+
+Samostatná navigace Páry je odstraněna. Generátor se otevírá přes + v záložce
+Páry konkrétní akce; Uložit zpřístupní sadu členům. Název je volitelný, default
+je aktuální datum v Praze. Členský přehled používá stejnou kompaktní tabulku
+včetně párů pod čarou a členů bez páru či se stáním. Nové sady ukládají snapshot
+rosteru do pairing_runs.rules_snapshot. Starší sady bez snapshotu používají
+dostupnou účast akce; historické stání před jejich uložením nelze rekonstruovat.
+
+Pásma a Písně mají oddělené záložky a bulk dialog za +. Pásma z katalogu
+i vlastní název se uloží jedním requestem. Písně se vybírají checkboxy,
+pořadí a potvrzení série se mění v detailu. Přidání písní atomicky zapne zpívání
+na akci. Draft série zůstávají pro členy skryté.
+
+Validace: npm run check (119 testů); SQL event_pair_sets_test.sql, bulk attendance
+a legacy migration testy na izolovaném PostgreSQL 17; Chromium s mock API
+(1440/390/320 px), reálný worker, bulk requesty a členský readonly přehled.

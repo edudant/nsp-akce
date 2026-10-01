@@ -4755,6 +4755,10 @@ tbody tr:hover {
     backdrop-filter: blur(12px);
   }
 
+  .bottom-nav--3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
   .bottom-nav--4 {
     grid-template-columns: repeat(4, 1fr);
   }
@@ -7031,3 +7035,12 @@ tbody tr:hover {
 .event-status-info { display: inline-flex; align-items: center; gap: 4px; }
 
 .pair-reason { flex-basis: 100%; color: var(--text-muted, #526579); line-height: 1.5; }
+
+.compact-row--readonly { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
+.compact-row__title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.compact-row--readonly .compact-row__quick { display: flex; flex-shrink: 0; gap: 2px; }
+.song-subtitle { display: block; color: var(--text-muted); margin-top: 3px; }
+.bulk-picker { display: grid; gap: 14px; }
+.bulk-picker__options { display: grid; gap: 6px; max-height: 340px; overflow-y: auto; }
+.bulk-picker__options label { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+.bulk-picker__options input[type="checkbox"] { width: 18px; height: 18px; flex-shrink: 0; }

@@ -35,6 +35,9 @@ describe("Administrative navigation and event transitions", () => {
       </AppShell>,
     );
     const sidebar = screen.getByRole("complementary");
+    expect(
+      screen.queryByRole("link", { name: "Páry" }),
+    ).not.toBeInTheDocument();
     fireEvent.click(
       within(sidebar).getByRole("button", { name: "Zobrazit jako člen" }),
     );
