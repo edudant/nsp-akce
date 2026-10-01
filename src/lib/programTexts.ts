@@ -55,3 +55,8 @@ export async function saveSongText(id: string, blocks: ProgramTextBlock[], expec
   const { error } = await requireSupabase().rpc('save_song_text', { song_id: id, new_blocks: blocks, expected_updated_at: expectedUpdatedAt });
   if (error) throw error;
 }
+
+export async function deleteProgram(id: string) {
+  const { error } = await requireSupabase().rpc('delete_program', { program_id: id });
+  if (error) throw error;
+}

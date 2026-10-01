@@ -7,15 +7,27 @@ import { TextsPage } from './TextsPage';
 import { ProgramTextPage } from './ProgramTextPage';
 import { SongTextPage } from './SongTextPage';
 import { parseCarolImport, parseProgramImport } from '../lib/programTexts';
-const mocks=vi.hoisted(()=>({getProgramText:vi.fn(),getSongText:vi.fn(),saveProgramText:vi.fn(),saveSongText:vi.fn(),navigate:vi.fn()}));
+const mocks=vi.hoisted(()=>({deleteProgram:vi.fn(),getProgramText:vi.fn(),getSongText:vi.fn(),saveProgramText:vi.fn(),saveSongText:vi.fn(),navigate:vi.fn()}));
 vi.mock('../lib/programTexts',async original=>({...await original<typeof import('../lib/programTexts')>(), ...mocks}));
 vi.mock('../components/Router',async original=>({...await original<typeof import('../components/Router')>(),navigate:mocks.navigate}));
 vi.mock('../components/DataContext',()=>({databaseQueryKey:['database'],useViewMode:()=>({scope:'test',memberPreview:false}),useDatabase:()=>({data:{programCatalog:[{id:'p',name:'Strašidla',active:true,sortOrder:1}],songs:[{id:'s',name:'Obyčejná píseň',kind:'song',active:true},{id:'c',name:'Koleda',kind:'carol',active:true,hasText:true},{id:'hidden',name:'Skrytá koleda',kind:'carol',active:false}]}})}));
 const blocks=[{kind:'heading',text:'Název'},{kind:'text',text:'První řádek\nDruhý řádek',notes:'TIŠE'},{kind:'note',text:'Předehra'}];
 function show(element:React.ReactNode){render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}>{element}</QueryClientProvider>);}
-beforeEach(()=>{vi.clearAllMocks();mocks.getProgramText.mockResolvedValue({blocks,updatedAt:'stamp'});mocks.getSongText.mockResolvedValue({blocks,updatedAt:'stamp',sourcePages:[3]});mocks.saveProgramText.mockResolvedValue(undefined);});
+beforeEach(()=>{vi.clearAllMocks();mocks.getProgramText.mockResolvedValue({blocks,updatedAt:'stamp'});mocks.getSongText.mockResolvedValue({blocks,updatedAt:'stamp',sourcePages:[3]});mocks.saveProgramText.mockResolvedValue(undefined);mocks.deleteProgram.mockResolvedValue(undefined);});
 afterEach(cleanup);
 describe('Repertoire texts',()=>{
+ it('confirms admin deletion and keeps an in-use error visible',async()=>{
+  mocks.deleteProgram.mockRejectedValue(new Error('Pásmo je použité v programu akce.'));
+  show(<ProgramTextPage id="p" canEdit/>);
+  const action=await screen.findByRole('button',{name:'Smazat pásmo'});
+  expect(action.querySelector('svg')).not.toBeNull();
+  fireEvent.click(action);
+  expect(mocks.deleteProgram).not.toHaveBeenCalled();
+  fireEvent.click(screen.getAllByRole('button',{name:'Smazat pásmo'}).at(-1)!);
+  expect(await screen.findByRole('alert')).toHaveTextContent('Pásmo je použité');
+  expect(mocks.deleteProgram).toHaveBeenCalledWith('p');
+  expect(mocks.navigate).not.toHaveBeenCalled();
+ });
  it('offers only carols in the song picker of a carol event',()=>{
   show(<SongSeriesPanel db={{songs:[{id:'s',name:'Běžná píseň',active:true,kind:'song'},{id:'c',name:'Vánoční koleda',active:true,kind:'carol'}]} as AppDatabase} event={{id:'e',seasonKind:'carols',songSeries:[]} as unknown as EnsembleEvent} admin/>);
   fireEvent.click(screen.getByRole('button',{name:'Přidat koledy'}));

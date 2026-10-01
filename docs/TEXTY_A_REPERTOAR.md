@@ -84,3 +84,14 @@ včetně porovnání vykresleného obsahu, zalamování, skrytí poznámek a adm
 a porovnáním všech uložených bloků proti privátním importům. Běžných 57 písní
 zůstává bez dodaných textů. Release vychází z publikované verze `8d10bf2`
 a neobsahuje souběžnou úpravu dialogu párů a stavů akcí.
+
+## Doplnění Bláhovin a Chodské svatby
+
+Import nyní obsahuje také `Bláhoviny - texty.doc` a `Svarba ráno - texty.doc`
+(přiřazeno k Chodské svatbě). Repliky droužky a ženicha jsou dialog,
+nikoli skrytelné poznámky. Obsah je ověřen proti zdrojovým dokumentům.
+
+Admin má v detailu ikony úprav a mazání. `delete_program` vyžaduje admina,
+zámek položky a zákaz smazání pásma používaného v programu akce.
+Nepoužité pásmo se smaže včetně textů; použité lze skrýt pro nové akce.
+Dialog vyžaduje potvrzení a zobrazuje serverovou chybu.

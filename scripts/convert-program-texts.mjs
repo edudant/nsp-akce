@@ -7,6 +7,7 @@ import { JSDOM } from 'jsdom';
 const input = process.argv[2] || path.join(os.homedir(), 'Downloads');
 const output = process.argv[3] || '.local/program-texts.json';
 const names = {
+  'Bláhoviny': 'Bláhoviny', 'Svarba ráno': 'Chodská svatba',
   'Kolečka': 'Kolečka', 'POSTŘEKOVINY': 'Postřekoviny',
   'PRHOHŮDKY_A_VORAČKY': 'Prohůdky ha voračky', 'Posvícení': 'Posvícení',
   'Strašidla': 'Strašidla', 'Travničky': 'Travničky', 'Volání': 'Volání',
@@ -28,6 +29,7 @@ for (const [stem, name] of Object.entries(names)) {
   const blocks = [];
   const retained = [];
   let boundary = true;
+  let weddingDialogue = false;
   for (const p of document.querySelectorAll('body p, body li')) {
     const raw = p.textContent;
     const full = clean(raw);
@@ -52,6 +54,17 @@ for (const [stem, name] of Object.entries(names)) {
         notes = clean(italic);
       }
       if (/^(?:Hančička|Hančika|Honza|Honzíček|Dodla|kecal|Ch\d*|D|Staryj|Kapelník|jinyj chlapec)\b.*[:.]/i.test(text)) kind = 'dialogue';
+    }
+    if (name === 'Chodská svatba') {
+      // Tabs here separate speakers from spoken lines, not stage directions.
+      text = full; notes = undefined; kind = 'text';
+      if (/bouření|vorevřú dveře/.test(full)) { weddingDialogue = true; kind = 'note'; }
+      else {
+        if (/^Vítám já Tě pan ženichu/.test(full)) weddingDialogue = false;
+        if (weddingDialogue || /^[„“"]/.test(full)) kind = 'dialogue';
+        const cue = text.match(/^\(([^)]+)\)\s*/);
+        if (cue && kind === 'dialogue') { notes = cue[0].trim(); text = text.slice(cue[0].length); }
+      }
     }
     if (!blocks.length || (name === 'Strašidla' && p.querySelector('.s1') && full.length < 80) || full === 'Hádka o sólo') kind = 'heading';
     if (kind === 'note') {
