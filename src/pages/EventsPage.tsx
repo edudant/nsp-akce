@@ -1,3 +1,4 @@
+import { CalendarSubscriptionDialog } from "../components/CalendarSubscriptionDialog";
 import { EventForm, type EventFormInput } from "../components/EventForm";
 import {
   CalendarDays,
@@ -32,7 +33,7 @@ import {
   type EventType,
   type ProgramCatalogItem,
 } from "../lib/domain";
-import { databaseQueryKey, useDatabase } from "../components/DataContext";
+import { databaseQueryKey, useDatabase, useViewMode } from "../components/DataContext";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataStates";
 import { ResponseBadge } from "../components/Participation";
 import { eventHasStarted } from "../lib/memberPortal";
@@ -52,12 +53,14 @@ type EventFilter = "all" | EventType;
 
 export function EventsPage({ canEdit }: { canEdit: boolean }) {
   const database = useDatabase();
+  const { scope } = useViewMode();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<EventFilter>("all");
   const [search, setSearch] = useState("");
   const [olderSeasonIds, setOlderSeasonIds] = useState<string[]>([]);
   const [view, setView] = useState<"list" | "calendar">("list");
   const [createOpen, setCreateOpen] = useState(false);
+  const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() =>
     parseISO(todayInPrague()),
   );
@@ -107,12 +110,19 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
     <div className="page">
       <PageHeader
         actions={
-          canEdit ? (
-            <Button onClick={() => setCreateOpen(true)}>
-              <CalendarPlus aria-hidden="true" />
-              Nová akce
-            </Button>
-          ) : null
+          <>
+            {database.data.myMemberId && database.data.accessMode !== "shared" && (
+              <Button variant="secondary" onClick={() => setSubscriptionOpen(true)}>
+                Přidat do kalendáře
+              </Button>
+            )}
+            {canEdit ? (
+              <Button onClick={() => setCreateOpen(true)}>
+                <CalendarPlus aria-hidden="true" />
+                Nová akce
+              </Button>
+            ) : null}
+          </>
         }
         description={
           canEdit
@@ -281,6 +291,9 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
         </div>
       )}
 
+      {subscriptionOpen && database.data.myMemberId && database.data.accessMode !== "shared" && (
+        <CalendarSubscriptionDialog key={`${scope}:${database.data.myMemberId}`} onClose={() => setSubscriptionOpen(false)} />
+      )}
       {canEdit ? (
         <CreateEventDialog
           error={createMutation.error?.message}

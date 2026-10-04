@@ -1,0 +1,56 @@
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, expect, it, vi } from 'vitest';
+import { CalendarSubscriptionDialog } from './CalendarSubscriptionDialog';
+import { calendarSubscriptions } from '../lib/calendarSubscriptions';
+vi.mock('../lib/calendarSubscriptions', () => ({ calendarSubscriptions: { list: vi.fn(), create: vi.fn(), revoke: vi.fn() } }));
+const metadata = [{ id: '1', kind: 'all', createdAt: '2026-10-04T12:00:00Z', revokedAt: null, linked: true }];
+beforeEach(() => { cleanup(); vi.resetAllMocks(); vi.mocked(calendarSubscriptions.list).mockResolvedValue([]); });
+it('creates distinct links and copies the secret only from the dialog', async () => {
+ vi.mocked(calendarSubscriptions.create).mockResolvedValue('https://example.org/feed?token=secret');
+ const writeText = vi.fn().mockResolvedValue(undefined);
+ Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+ render(<CalendarSubscriptionDialog onClose={vi.fn()} />);
+ await waitFor(() => expect(screen.getByText('Vytvořit: Jen zkoušky')).not.toBeDisabled());
+ fireEvent.click(screen.getByText('Vytvořit: Jen zkoušky'));
+ await screen.findByDisplayValue('https://example.org/feed?token=secret');
+ expect(calendarSubscriptions.create).toHaveBeenCalledWith('rehearsal');
+ fireEvent.click(screen.getByText('Kopírovat webcal URL'));
+ await waitFor(() => expect(writeText).toHaveBeenCalledWith('webcal://example.org/feed?token=secret'));
+});
+it('requires explicit replacement acknowledgement and supports revocation', async () => {
+ vi.mocked(calendarSubscriptions.list).mockResolvedValue(metadata as Awaited<ReturnType<typeof calendarSubscriptions.list>>);
+ vi.mocked(calendarSubscriptions.create).mockResolvedValue('https://example.org/feed?token=new');
+ render(<CalendarSubscriptionDialog onClose={vi.fn()} />);
+ fireEvent.click(await screen.findByText('Nahradit: Všechny akce'));
+ expect(calendarSubscriptions.create).not.toHaveBeenCalled();
+ expect(screen.getByText(/Nový odběr musíte znovu přidat/)).toBeInTheDocument();
+ fireEvent.click(screen.getByText('Potvrdit náhradu'));
+ await screen.findByDisplayValue('https://example.org/feed?token=new');
+ await waitFor(() => expect(screen.getByText('Zneplatnit: Všechny akce')).not.toBeDisabled());
+ fireEvent.click(screen.getByText('Zneplatnit: Všechny akce'));
+ await waitFor(() => expect(calendarSubscriptions.revoke).toHaveBeenCalledWith('all'));
+ await waitFor(() => expect(screen.queryByDisplayValue('https://example.org/feed?token=new')).toBeNull());
+});
+it('shows load and mutation errors without exposing backend details', async () => {
+ vi.mocked(calendarSubscriptions.list).mockRejectedValue(new Error('sensitive'));
+ const result = render(<CalendarSubscriptionDialog onClose={vi.fn()} />);
+ expect(await screen.findByRole('alert')).toHaveTextContent('Odběry se nepodařilo načíst');
+ result.unmount(); vi.mocked(calendarSubscriptions.list).mockResolvedValue([]);
+ vi.mocked(calendarSubscriptions.create).mockRejectedValue(new Error('sensitive'));
+ render(<CalendarSubscriptionDialog onClose={vi.fn()} />);
+ await waitFor(() => expect(screen.getByText('Vytvořit: Všechny akce')).not.toBeDisabled());
+ fireEvent.click(screen.getByText('Vytvořit: Všechny akce'));
+ expect(await screen.findByRole('alert')).toHaveTextContent('Změna odběru se nepodařila');
+ expect(screen.queryByText('sensitive')).toBeNull();
+});
+it('allows manual copying after clipboard failure', async () => {
+ vi.mocked(calendarSubscriptions.create).mockResolvedValue('https://example.org/feed?token=manual');
+ Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('blocked')) } });
+ render(<CalendarSubscriptionDialog onClose={vi.fn()} />);
+ await waitFor(() => expect(screen.getByText('Vytvořit: Všechny akce')).not.toBeDisabled());
+ fireEvent.click(screen.getByText('Vytvořit: Všechny akce'));
+ await screen.findByDisplayValue('https://example.org/feed?token=manual');
+ fireEvent.click(screen.getByText('Kopírovat HTTPS URL'));
+ expect(await screen.findByRole('alert')).toHaveTextContent('zkopírujte odkaz ručně');
+ expect(screen.getByDisplayValue('https://example.org/feed?token=manual')).toHaveAttribute('readonly');
+});

@@ -13,7 +13,9 @@
     "check": "npm run lint && npm run test && npm run build",
     "test:integration": "node scripts/test-feature-integration.mjs",
     "test:browser": "node scripts/test-feature-browser.mjs",
-    "dev:features": "node scripts/dev-feature-local.mjs"
+    "dev:features": "node scripts/dev-feature-local.mjs",
+    "test:calendar:db": "bash scripts/test-calendar-local-db.sh",
+    "test:calendar:integration": "node scripts/test-calendar-integration.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",

@@ -28,3 +28,5 @@ await fs.copyFile("supabase/seed.sql", path.join(root, "seed.sql"));
 console.log(
   `Prepared isolated project in ${workdir}; external SMTP disabled.`,
 );
+
+await fs.writeFile(path.join(workdir, "calendar-function.env"), "CALENDAR_APP_URL=http://127.0.0.1:5175/nsp-akce/\n");

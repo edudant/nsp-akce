@@ -7208,3 +7208,7 @@ tbody tr:hover {
 .song-favorite.is-favorite { color: var(--amber-700); }
 .song-favorite { flex-shrink: 0; }
 .avatar--photographer { color: #684b7b; background: #ebe3f4; }
+
+.calendar-subscription { padding-block: 1rem; border-bottom: 1px solid var(--border); }
+.calendar-subscription input { width: 100%; margin-block: .4rem; }
+.calendar-subscription label { display: block; overflow-wrap: anywhere; }

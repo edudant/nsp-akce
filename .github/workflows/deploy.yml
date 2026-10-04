@@ -54,7 +54,7 @@ jobs:
           node scripts/setup-feature-local.mjs
           supabase start --workdir "$NSP_TEST_WORKDIR" --exclude studio,storage-api,realtime,postgres-meta,logflare,vector,supavisor
           bash scripts/test-feature-local-db.sh --reset
-          nohup supabase functions serve --workdir "$NSP_TEST_WORKDIR" --no-verify-jwt > /tmp/nsp-feature-functions.log 2>&1 &
+          nohup supabase functions serve --workdir "$NSP_TEST_WORKDIR" --env-file "$NSP_TEST_WORKDIR/calendar-function.env" --no-verify-jwt > /tmp/nsp-feature-functions.log 2>&1 &
 
       - name: Wait for local Edge Function
         shell: bash
@@ -78,6 +78,7 @@ jobs:
             echo "$result" | jq -e 'type == "object" and all(.[]; . == 0)'
           done
           npm run test:integration
+          npm run test:calendar:integration
           psql "$database_url" -X -q -v ON_ERROR_STOP=1 \
             -f supabase/tests/member_profile_write_security_test.sql >/dev/null
 
