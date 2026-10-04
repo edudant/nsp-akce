@@ -28,7 +28,8 @@ function utc(value: string): string {
 export function calendarFeed(events: CalendarEvent[], appUrl: string): string {
   const base = new URL(appUrl);
   if (base.protocol !== 'https:' && base.hostname !== '127.0.0.1' && base.hostname !== 'localhost') throw new Error('Invalid app URL');
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//NSP Akce//Osobní odběr//CS', 'CALSCALE:GREGORIAN'];
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//NSP Akce//Osobní odběr//CS', 'CALSCALE:GREGORIAN',
+    'NAME:NSP Akce', 'X-WR-CALNAME:NSP Akce'];
   for (const event of events) {
     const url = new URL(base); url.hash = `/udalosti/${event.id}`;
     const description = [event.note ?? '', `Aktuální odpověď: ${label(event.response)}`];

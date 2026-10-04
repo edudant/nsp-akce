@@ -5,6 +5,14 @@ const event: CalendarEvent = { id: 'event-1', title: 'Páteční zkouška', loca
 const app = 'https://example.org/nsp-akce/';
 const unfold = (value: string) => value.replace(/\r\n /g, '');
 describe('calendar serialization', () => {
+ it('provides the default calendar name even when there are no events', () => {
+  for (const events of [[], [event]]) {
+   const text = calendarFeed(events, app);
+   const header = text.split('BEGIN:VEVENT')[0];
+   expect(header).toContain('\r\nNAME:NSP Akce\r\n');
+   expect(header).toContain('\r\nX-WR-CALNAME:NSP Akce\r\n');
+  }
+ });
  it('exports current response, provenance, event note and app link, without alarms', () => {
   const text = unfold(calendarFeed([event], app));
   expect(text).toContain('SUMMARY:[Přijdu] Páteční zkouška');

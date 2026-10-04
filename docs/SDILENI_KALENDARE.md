@@ -157,6 +157,12 @@ odběr a refresh v osobních kalendářích nadále vyžaduje uživatelský smok
 
 ## Úprava nápovědy a mobilní ikony
 
+Feed předává výchozí název `NSP Akce` v `NAME` (RFC 7986) i
+`X-WR-CALNAME`. Platí i pro odběr bez akcí. Automatické přejmenování
+již přidaného odběru v Google/Apple/Outlook není ověřené; uživatel může
+název změnit v nastavení osobního kalendáře. Tato úprava vyžaduje pouze
+nasazení Edge Function, bez DB migrace.
+
 Nápověda používá běžné názvy „odkaz“ a „Získat odkaz“ a konkrétní kroky.
 Tlačítko „Zkopírovat a otevřít Google Kalendář“ zkopíruje odkaz a otevře
 oficiální Google stránku pro přidání pomocí URL v nové záložce. Uživatel
