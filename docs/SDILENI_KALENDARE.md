@@ -154,3 +154,16 @@ Platný produkční GET nebyl lokálně stažen: automatické schvalování odm�
 export reálných dat akcí do lokálního procesu. Obsah GET je ověřený na
 syntetických datech ve skutečném lokálním Supabase/Deno runtime. Skutečný
 odběr a refresh v osobních kalendářích nadále vyžaduje uživatelský smoke test.
+
+## Úprava nápovědy a mobilní ikony
+
+Nápověda používá běžné názvy „odkaz“ a „Získat odkaz“ a konkrétní kroky.
+Tlačítko „Zkopírovat a otevřít Google Kalendář“ zkopíruje odkaz a otevře
+oficiální Google stránku pro přidání pomocí URL v nové záložce. Uživatel
+odkaz vloží a přidání potvrdí; Google podporuje tento krok v prohlížeči na
+počítači. Do adresy odchozího Google odkazu se token nepřidává.
+Alternativní webcal odkaz je v rozbalovací části pro jiné kalendáře.
+
+Tlačítko odběru na stránce Akce má ikonu i přístupný název a tooltip.
+Mobilní layout schovává text tlačítek v hlavičce, proto bez ikony dříve
+zobrazoval prázdný čtverec. UI test kontroluje přítomnost ikony.

@@ -12,9 +12,11 @@ it.each([
 ] as const)('calendar access for %s with member %s', (accessMode, myMemberId, visible) => {
  fixture.data = { members: [], events: [], preferences: [], updatedAt: '', accessMode, myMemberId };
  render(<QueryClientProvider client={new QueryClient()}><EventsPage canEdit={accessMode === 'admin'} /></QueryClientProvider>);
- const button = screen.queryByText('Přidat do kalendáře');
+ const button = screen.queryByRole('button', { name: 'Přidat do kalendáře' });
  expect(Boolean(button)).toBe(visible);
  if (button) {
+  expect(button.querySelector('svg')).not.toBeNull();
+  expect(button).toHaveAttribute('title', 'Přidat do kalendáře');
   fireEvent.click(button); expect(screen.getByRole('dialog')).toBeInTheDocument();
   fireEvent.click(screen.getByText('Zavřít odběr')); expect(screen.queryByRole('dialog')).toBeNull();
  }

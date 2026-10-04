@@ -112,7 +112,8 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
         actions={
           <>
             {database.data.myMemberId && database.data.accessMode !== "shared" && (
-              <Button variant="secondary" onClick={() => setSubscriptionOpen(true)}>
+              <Button variant="secondary" title="Přidat do kalendáře" aria-label="Přidat do kalendáře" onClick={() => setSubscriptionOpen(true)}>
+                <CalendarDays aria-hidden="true" />
                 Přidat do kalendáře
               </Button>
             )}
