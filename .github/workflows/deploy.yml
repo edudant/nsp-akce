@@ -86,6 +86,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_PUSH_VAPID_PUBLIC_KEY: ${{ secrets.VITE_PUSH_VAPID_PUBLIC_KEY }}
         run: npm run build
 
       - name: Configure Pages

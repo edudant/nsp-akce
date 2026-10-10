@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
   fireEvent,
@@ -26,6 +27,7 @@ describe("Administrative navigation and event transitions", () => {
       >
         <h1>Obsah</h1>
       </AppShell>,
+      { wrapper: ({ children }) => <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider> },
     );
     const sidebar = screen.getByRole("complementary");
     expect(
@@ -62,6 +64,7 @@ describe("Administrative navigation and event transitions", () => {
       >
         <h1>Obsah</h1>
       </AppShell>,
+      { wrapper: ({ children }) => <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider> },
     );
     expect(
       screen.getByRole("button", { name: "Zobrazit jako správce" }),

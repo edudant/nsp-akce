@@ -30,6 +30,7 @@ import { appApi } from "../lib/dataApi";
 import { databaseQueryKey, useDatabase } from "../components/DataContext";
 import { ErrorState, LoadingState } from "../components/DataStates";
 import {
+  formatEventTime,
   formatDate,
   formatPoints,
   formatWeekday,
@@ -56,7 +57,7 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
   const upcoming = [...database.data.events]
     .filter(
       (event) =>
-        event.date >= today &&
+        (event.endDate ?? event.date) >= today &&
         event.status !== "cancelled" &&
         (!database.data?.seasons?.length ||
           database.data.seasons.some(
@@ -131,7 +132,7 @@ export function DashboardPage({ canEdit }: { canEdit: boolean }) {
                 <div className="event-meta">
                   <span>
                     <Clock3 aria-hidden="true" />
-                    {nextEvent.startTime}–{nextEvent.endTime}
+                    {formatEventTime(nextEvent)}
                   </span>
                   <span>
                     <MapPin aria-hidden="true" />
@@ -393,7 +394,7 @@ function MemberDashboard({ database }: { database: AppDatabase }) {
   const upcoming = database.events
     .filter(
       (event) =>
-        event.date >= today &&
+        (event.endDate ?? event.date) >= today &&
         event.status !== "cancelled" &&
         (!database.seasons?.length ||
           database.seasons.some((s) => s.active && s.id === event.seasonId)),
@@ -474,7 +475,7 @@ function MemberDashboard({ database }: { database: AppDatabase }) {
                       }
                       pending={pendingEventId === event.id}
                       onSave={(response, note) =>
-                        responseMutation.mutate({
+                        responseMutation.mutateAsync({
                           eventId: event.id,
                           response,
                           note,

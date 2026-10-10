@@ -91,3 +91,7 @@ verify_jwt = false
 # Public capability URL; handler verifies the token through a server-only projection.
 [functions.calendar-feed]
 verify_jwt = false
+
+# Scheduled server-to-server calls authenticated by PUSH_CRON_SECRET.
+[functions.push-reminders]
+verify_jwt = false

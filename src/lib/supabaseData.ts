@@ -1,3 +1,5 @@
+import { pragueLocalToIso } from "./eventTime";
+export { pragueLocalToIso } from "./eventTime";
 import { getEmailAuthErrorMessage } from "./auth";
 import type {
   AccessMode,
@@ -442,22 +444,6 @@ function localTime(iso: string): string {
   }).format(new Date(iso));
 }
 
-export function pragueLocalToIso(date: string, time: string): string {
-  const approximation = new Date(`${date}T${time}:00Z`);
-  const offsetName = new Intl.DateTimeFormat("en", {
-    timeZone: "Europe/Prague",
-    timeZoneName: "shortOffset",
-  })
-    .formatToParts(approximation)
-    .find((part) => part.type === "timeZoneName")?.value;
-  const match = offsetName?.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
-  const direction = match?.[1] === "-" ? -1 : 1;
-  const offsetMinutes =
-    direction * (Number(match?.[2] ?? 0) * 60 + Number(match?.[3] ?? 0));
-  return new Date(
-    approximation.getTime() - offsetMinutes * 60_000,
-  ).toISOString();
-}
 
 function eventPrograms(
   eventId: string,
@@ -586,6 +572,7 @@ function eventFromRows(
     date: localDate(row.starts_at),
     startTime: localTime(row.starts_at),
     endTime: localTime(row.ends_at),
+    endDate: localDate(row.ends_at),
     location: row.location ?? "",
     status: row.status,
     weight: numberValue(row.points_weight),
@@ -857,6 +844,7 @@ function memberEvent(
     date: localDate(row.startsAt),
     startTime: localTime(row.startsAt),
     endTime: localTime(row.endsAt),
+    endDate: localDate(row.endsAt),
     location: row.location ?? "",
     status: row.status,
     weight: numberValue(eventRow?.points_weight),
@@ -1078,6 +1066,7 @@ function sharedEvent(row: SharedEvent): EnsembleEvent {
     date: localDate(row.startsAt),
     startTime: localTime(row.startsAt),
     endTime: localTime(row.endsAt),
+    endDate: localDate(row.endsAt),
     location: row.location ?? "",
     status: row.status,
     weight: numberValue(row.pointsWeight),
@@ -1332,7 +1321,7 @@ export const supabaseApi: Omit<
         title: input.title,
         location: input.location || null,
         starts_at: pragueLocalToIso(input.date, input.startTime),
-        ends_at: pragueLocalToIso(input.date, input.endTime),
+        ends_at: pragueLocalToIso(input.endDate ?? input.date, input.endTime),
         status: input.status,
         points_weight: input.weight,
         required_pairs: input.capacityPairs,

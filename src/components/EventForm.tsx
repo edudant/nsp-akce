@@ -32,6 +32,8 @@ export function EventForm({
     const now = parseISO(todayInPrague());
     return format(addDays(now, (5 - now.getDay() + 7) % 7 || 7), "yyyy-MM-dd");
   });
+  const [multiDay, setMultiDay] = useState(!!event?.endDate && event.endDate !== event.date);
+  const [endDate, setEndDate] = useState(event?.endDate ?? event?.date ?? date);
   const [start, setStart] = useState(event?.startTime ?? "19:00");
   const [end, setEnd] = useState(event?.endTime ?? "21:00");
   const [location, setLocation] = useState(event?.location ?? "Stará škola");
@@ -64,7 +66,7 @@ export function EventForm({
     db.data?.seasons?.find((s) => s.id === seasonId)?.kind === "dance";
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (end <= start) {
+    if ((multiDay ? endDate : date) < date || ((multiDay ? endDate : date) === date && end <= start)) {
       setFormError("Konec musí být po začátku.");
       return;
     }
@@ -79,6 +81,7 @@ export function EventForm({
       date,
       startTime: start,
       endTime: end,
+      endDate: multiDay ? endDate : date,
       location,
       seasonId,
       status,
@@ -188,6 +191,16 @@ export function EventForm({
           />
         </Field>
       </div>
+      <label>
+        <input type="checkbox" checked={multiDay} onChange={(e) => {
+          setMultiDay(e.target.checked);
+          if (endDate < date) setEndDate(date);
+        }} /> Vícedenní akce
+      </label>
+      {multiDay && <Field label="Datum konce">
+        <input aria-label="Datum konce akce" type="date" required min={date}
+          value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+      </Field>}
       <Field label="Místo">
         <input
           aria-label="Místo akce"

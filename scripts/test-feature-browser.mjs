@@ -235,7 +235,7 @@ try {
     "",
   );
   await member.getByLabel("Poznámka k odpovědi").fill("Čekám na potvrzení");
-  await member.getByRole("button", { name: "Uložit odpověď" }).click();
+  await member.getByLabel("Poznámka k odpovědi").blur();
   await member
     .locator(".my-attendance-card .response-badge")
     .filter({ hasText: "Zatím nevím" })
@@ -251,9 +251,6 @@ try {
   await member
     .getByRole("radio", { name: "Přijdu", exact: true })
     .locator("..")
-    .click();
-  await member
-    .getByRole("button", { name: "Uložit odpověď", exact: true })
     .click();
   await member.locator(".my-attendance-card .response-badge--yes").waitFor();
   await member.reload();

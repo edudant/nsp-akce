@@ -27,3 +27,5 @@ docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$
 docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$root/supabase/tests/song_favorites_test.sql"
 
 docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$root/supabase/tests/calendar_subscriptions_test.sql"
+
+docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$root/supabase/tests/multiday_push_test.sql"

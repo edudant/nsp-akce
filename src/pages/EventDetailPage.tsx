@@ -28,6 +28,7 @@ import { SongSeriesPanel } from "../components/SongSeriesPanel";
 import { AppLink } from "../components/Router";
 import { compatibleMembers } from "../lib/ensembleRules";
 import {
+  formatEventTime,
   formatDate,
   formatAuditTime,
   formatSetDate,
@@ -182,7 +183,7 @@ function EventContent({
         <div className="event-hero__copy">
           <PageHeader
             title={event.title}
-            description={`${formatDate(event.date)}${activeSection === "pairs" ? "" : ` · ${event.startTime}–${event.endTime}`} · ${event.location}`}
+            description={`${activeSection === "pairs" ? formatDate(event.date) : event.endDate && event.endDate !== event.date ? formatEventTime(event) : `${formatDate(event.date)} · ${formatEventTime(event)}`} · ${event.location}`}
           />
           {event.note && <p className="event-hero__note">{event.note}</p>}
         </div>
@@ -268,7 +269,7 @@ function EventContent({
                     record={myRecord}
                     pending={response.isPending}
                     onSave={(interest, note) =>
-                      response.mutate({ interest, note })
+                      response.mutateAsync({ interest, note })
                     }
                   />
                 </>

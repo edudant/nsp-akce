@@ -1,3 +1,4 @@
+import { pragueLocalToIso } from "./eventTime";
 export type AppRole = "admin" | "member";
 export type AccessMode = "admin" | "member" | "shared";
 export type PairingRole = "leader" | "follower" | "musician" | "photographer";
@@ -173,6 +174,7 @@ export interface EnsembleEvent {
   date: string;
   startTime: string;
   endTime: string;
+  endDate?: string;
   location: string;
   status: EventStatus;
   weight: number;
@@ -430,11 +432,8 @@ export const interestLabels: Record<InterestStatus, string> = {
 };
 
 export function getEventDurationMinutes(event: EnsembleEvent): number {
-  const [startHour = 0, startMinute = 0] = event.startTime
-    .split(":")
-    .map(Number);
-  const [endHour = 0, endMinute = 0] = event.endTime.split(":").map(Number);
-  return Math.max(1, endHour * 60 + endMinute - startHour * 60 - startMinute);
+  return Math.max(1, (Date.parse(pragueLocalToIso(event.endDate ?? event.date, event.endTime)) -
+    Date.parse(pragueLocalToIso(event.date, event.startTime))) / 60_000);
 }
 
 export function getAttendancePoints(

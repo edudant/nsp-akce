@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   AppDatabase,
@@ -39,77 +39,79 @@ export function ResponseEditor({
 }) {
   const [response, setResponse] = useState<InterestStatus>(record.interest);
   const [note, setNote] = useState(record.note ?? "");
+  const [reasonOpen, setReasonOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const saved = useRef({ response: record.interest, note: record.note ?? "" });
+  const inFlight = useRef<Promise<boolean> | null>(null);
   const allowed = admin || canRespondToEvent(event, todayInPrague());
+  const save = (value: InterestStatus, text: string): Promise<boolean> => {
+    if (inFlight.current) return inFlight.current;
+    if (!allowed || pending || (value === "maybe" && !text.trim())) return Promise.resolve(false);
+    if (saved.current.response === value && saved.current.note === text) return Promise.resolve(true);
+    setSaving(true);
+    setError("");
+    const operation = (async () => {
+      try {
+        await Promise.resolve().then(() => onSave(value, text));
+        saved.current = { response: value, note: text };
+        setResponse(value);
+        return true;
+      } catch (cause) {
+        setResponse(saved.current.response);
+        setError(cause instanceof Error ? cause.message : "Odpověď se nepodařilo uložit.");
+        return false;
+      } finally {
+        inFlight.current = null;
+        setSaving(false);
+      }
+    })();
+    inFlight.current = operation;
+    return operation;
+  };
   return (
-    <form
-      className="response-editor"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        if (response === "maybe" && !note.trim()) return;
-        try {
-          await onSave(response, note);
-        } catch {
-          // Keep the draft note available for retry; the parent shows the error.
-        }
-      }}
-    >
-      <ChoiceButtons
-        label="Odpověď"
-        value={response}
-        disabled={!allowed || pending}
-        choices={
-          admin
-            ? [...responseChoices, { value: "unset", label: "Bez odpovědi" }]
-            : responseChoices
-        }
-        onChange={async (value) => {
-          setResponse(value);
-          if (admin && (value !== "maybe" || note.trim())) {
-            try {
-              await onSave(value, note);
-            } catch {
-              setResponse(record.interest);
-            }
+    <div className="response-editor">
+      <ChoiceButtons label="Odpověď" value={response} disabled={!allowed || pending || saving}
+        choices={admin ? [...responseChoices, { value: "unset", label: "Bez odpovědi" }] : responseChoices}
+        onChange={(value) => {
+          if (value === "maybe") {
+            setReasonOpen(true);
+          } else {
+            void save(value, note);
           }
-        }}
-      />
-      {(response === "maybe" || event.type === "performance" || !!note) && (
-        <input
-          aria-label="Poznámka k odpovědi"
-          placeholder={response === "maybe" ? "Povinná poznámka" : "Poznámka"}
-          maxLength={500}
-          required={response === "maybe"}
-          disabled={!allowed || pending}
-          value={note}
+        }} />
+      {response === "maybe" && <Button variant="ghost" disabled={!allowed || pending || saving}
+        onClick={() => setReasonOpen(true)}>Upravit důvod</Button>}
+      {!reasonOpen && response !== "maybe" && (event.type === "performance" || !!note) &&
+        <input aria-label="Poznámka k odpovědi" placeholder="Poznámka" maxLength={500}
+          disabled={!allowed || pending || saving} value={note}
           onChange={(e) => setNote(e.target.value)}
-        />
-      )}
-      {(!admin ||
-        response === "maybe" ||
-        event.type === "performance" ||
-        !!note) && (
-        <Button
-          type="submit"
-          size={admin ? "small" : "medium"}
-          disabled={
-            !allowed ||
-            (response === "unset" && !admin) ||
-            (response === "maybe" && !note.trim()) ||
-            (admin &&
-              response === record.interest &&
-              note === (record.note ?? ""))
-          }
-          loading={pending}
-        >
-          {admin ? "Uložit poznámku" : "Uložit odpověď"}
-        </Button>
-      )}
-      {admin && (
-        <small>Odpověď se uloží výběrem. Poznámku uložte tlačítkem.</small>
-      )}
-    </form>
+          onBlur={(e) => {
+            if (e.relatedTarget instanceof Element && e.relatedTarget.closest(".choice-buttons")) return;
+            if (response !== "unset" || admin) void save(response, note);
+          }} />}
+      {!reasonOpen && error && <p role="alert" className="form-error">{error}</p>}
+      {(pending || saving) && <small role="status">Ukládám…</small>}
+      <Dialog open={reasonOpen} title="Proč zatím nevíte?" size="small"
+        onClose={() => {
+          if (!allowed) { setReasonOpen(false); return; }
+          if (pending && !inFlight.current) return;
+          if (!note.trim()) { setNote(saved.current.note); setReasonOpen(false); return; }
+          void save("maybe", note).then(() => setReasonOpen(false));
+        }}>
+        <label className="field">Důvod
+          <textarea aria-label="Poznámka k odpovědi" required maxLength={500}
+            disabled={!allowed || pending || saving} value={note}
+            onChange={(e) => setNote(e.target.value)}
+            onBlur={() => { if (note.trim()) void save("maybe", note); }} />
+        </label>
+        <small>Důvod se uloží při opuštění pole nebo zavření okna. Prázdný důvod odpověď nezmění.</small>
+        {error && <p role="alert" className="form-error">{error}</p>}
+      </Dialog>
+    </div>
   );
 }
+
 export function AttendancePanel({
   db,
   event,

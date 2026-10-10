@@ -87,3 +87,8 @@ skutečná data souboru importovaná ze soukromého Excelu. Zdrojový Excel a os
 Schválený rozsah je v [zadání](docs/ZADANI_SEZONY_UCAST_A_PAROVANI.md).
 [Implementace a testy](docs/IMPLEMENTACE_A_TESTY_2026_09.md) obsahují výsledky
 lokálního ověření, příkazy pro opakování testů a přípravu nasazení nové verze.
+
+## Vícedenní akce a push
+
+Chování, lokální testy a konfigurace push připomínek jsou v
+[postupu](docs/VICE_DENNI_A_PUSH.md).

@@ -1,3 +1,4 @@
+import { PushSettings } from "./PushSettings";
 import {
   CalendarDays,
   Eye,
@@ -163,6 +164,7 @@ export function AppShell({
               </p>
             </details>
           )}
+          {session.accessMode !== "shared" && <PushSettings key={session.userId ?? session.memberId ?? "personal"} accountId={session.userId ?? session.memberId ?? "personal"} />}
           <div className="sidebar__profile">
             <span aria-hidden="true" className="profile-avatar">
               {session.displayName

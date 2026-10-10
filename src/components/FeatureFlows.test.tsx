@@ -313,7 +313,7 @@ describe("feature UI flows", () => {
     );
     const user = userEvent.setup();
     await user.click(screen.getByRole("radio", { name: "Přijdu" }));
-    await user.click(screen.getByRole("button", { name: "Uložit odpověď" }));
+    await user.tab();
     expect(api.updateMyResponse).toHaveBeenCalledWith("e", "yes", "");
     expect(screen.queryByText("Vybrat přání partnerů")).not.toBeInTheDocument();
   });
@@ -479,13 +479,12 @@ describe("feature UI flows", () => {
     );
     await user.click(screen.getByRole("radio", { name: "Zatím nevím" }));
     expect(screen.getByLabelText("Poznámka k odpovědi")).toBeRequired();
-    await user.click(screen.getByRole("button", { name: "Uložit odpověď" }));
+    await user.tab();
     expect(save).not.toHaveBeenCalled();
-    expect(
-      screen.getByRole("button", { name: "Uložit odpověď" }),
-    ).toBeDisabled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Zatím nevím" })).not.toBeChecked();
     await user.type(screen.getByLabelText("Poznámka k odpovědi"), "Čekám");
-    await user.click(screen.getByRole("button", { name: "Uložit odpověď" }));
+    await user.tab();
     expect(save).toHaveBeenCalledWith("maybe", "Čekám");
   });
   it("locks member response after confirmation and offers reasoned maybe for rehearsal", () => {
@@ -697,11 +696,9 @@ describe("admin bulk attendance and direct response editing", () => {
     save.mockClear();
     await user.click(screen.getByRole("radio", { name: "Zatím nevím" }));
     expect(save).not.toHaveBeenCalled();
-    expect(
-      screen.getByRole("button", { name: "Uložit poznámku" }),
-    ).toBeDisabled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Poznámka k odpovědi"), "Čekám");
-    await user.click(screen.getByRole("button", { name: "Uložit poznámku" }));
+    await user.tab();
     expect(save).toHaveBeenCalledExactlyOnceWith("maybe", "Čekám");
   });
   it("saves percentage only with its own button", async () => {
@@ -929,11 +926,11 @@ describe("mobile action regressions", () => {
     const note = screen.getByLabelText("Poznámka k odpovědi");
     expect(note).toBeRequired();
     await user.type(note, "   ");
-    await user.click(screen.getByRole("button", { name: "Uložit odpověď" }));
+    await user.tab();
     expect(save).not.toHaveBeenCalled();
     await user.clear(note);
     await user.type(note, "Pracovní směna");
-    await user.click(screen.getByRole("button", { name: "Uložit odpověď" }));
+    await user.tab();
     expect(save).toHaveBeenCalledWith("maybe", "Pracovní směna");
     expect(
       screen.queryByRole("radio", { name: "Náhradník" }),
@@ -1074,7 +1071,7 @@ describe("personal attendance and quick actual attendance", () => {
     expect(screen.getByRole("radio", { name: "Přijdu" })).toBeChecked();
     expect(screen.queryByText(/Skutečná účast:/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: "Nepřijdu" }));
-    await user.click(screen.getByRole("button", { name: "Uložit odpověď" }));
+    await user.tab();
     expect(api.updateMyResponse).toHaveBeenCalledWith("e", "no", "");
   });
   it("shows an initial voting form when own attendance record is not present", () => {
@@ -1328,5 +1325,42 @@ describe("event list and saved roster flows", () => {
     await userEvent.click(screen.getByRole("tab", { name: "Písně" }));
     expect(screen.getByText("Píseň jedna")).toBeVisible();
     expect(screen.queryByText("Pásmo")).not.toBeInTheDocument();
+  });
+});
+
+describe('multiday forms and immediate responses', () => {
+  it('saves an earlier end time on a later date and rejects a reversed date', async () => {
+    const user = userEvent.setup(), save = vi.fn();
+    setup();
+    render(<EventForm event={fixture({ date: '2027-06-01', endDate: '2027-06-03', endTime: '10:00', responseDeadline: '2027-05-30T10:00:00Z' })} loading={false} onSave={save} />);
+    await user.click(screen.getByRole('button', { name: 'Uložit akci' }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ date: '2027-06-01', endDate: '2027-06-03', endTime: '10:00' }));
+    save.mockClear();
+    fireEvent.change(screen.getByLabelText('Datum akce'), { target: { value: '2027-06-04' } });
+    fireEvent.submit(screen.getByRole('button', { name: 'Uložit akci' }).closest('form')!);
+    expect(save).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('Konec musí být po začátku');
+  });
+  it('retains the previous answer when the reason dialog is cancelled blank', async () => {
+    const user = userEvent.setup(), save = vi.fn(), event = fixture();
+    render(<ResponseEditor event={event} record={{ ...event.attendance[0], interest: 'yes' }} pending={false} onSave={save} />);
+    await user.click(screen.getByRole('radio', { name: 'Zatím nevím' }));
+    await user.click(screen.getByRole('button', { name: 'Zavřít' }));
+    expect(save).not.toHaveBeenCalled();
+    expect(screen.getByRole('radio', { name: 'Přijdu' })).toBeChecked();
+  });
+  it('restores the saved answer after an immediate save fails', async () => {
+    const user = userEvent.setup(), save = vi.fn().mockRejectedValue(new Error('Nelze uložit')), event = fixture();
+    render(<ResponseEditor event={event} record={event.attendance[0]} pending={false} onSave={save} />);
+    await user.click(screen.getByRole('radio', { name: 'Přijdu' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Nelze uložit');
+    expect(screen.getByRole('radio', { name: 'Přijdu' })).not.toBeChecked();
+  });
+  it('saves the typed note together with a changed answer', async () => {
+    const user = userEvent.setup(), save = vi.fn(), event = fixture();
+    render(<ResponseEditor event={event} record={{ ...event.attendance[0], interest: 'yes' }} pending={false} onSave={save} />);
+    await user.type(screen.getByLabelText('Poznámka k odpovědi'), 'Práce');
+    await user.click(screen.getByRole('radio', { name: 'Nepřijdu' }));
+    expect(save).toHaveBeenCalledExactlyOnceWith('no', 'Práce');
   });
 });

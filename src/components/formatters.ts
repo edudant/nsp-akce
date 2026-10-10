@@ -63,3 +63,9 @@ export function formatSetDate(at: string) {
 export function formatSetName(at = new Date().toISOString()) {
   return `${formatSetDate(at)} ${new Intl.DateTimeFormat("cs-CZ", { timeZone: "Europe/Prague", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(at))}`;
 }
+
+export function formatEventTime(event: { date: string; endDate?: string; startTime: string; endTime: string }) {
+  return event.endDate && event.endDate !== event.date
+    ? `${formatDate(event.date)} ${event.startTime} – ${formatDate(event.endDate)} ${event.endTime}`
+    : `${event.startTime}–${event.endTime}`;
+}

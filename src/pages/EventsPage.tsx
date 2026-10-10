@@ -37,7 +37,7 @@ import { databaseQueryKey, useDatabase, useViewMode } from "../components/DataCo
 import { EmptyState, ErrorState, LoadingState } from "../components/DataStates";
 import { ResponseBadge } from "../components/Participation";
 import { eventHasStarted } from "../lib/memberPortal";
-import { formatDate, todayInPrague } from "../components/formatters";
+import { formatEventTime, formatDate, todayInPrague } from "../components/formatters";
 import { PageHeader } from "../components/PageHeader";
 import { AppLink, navigate } from "../components/Router";
 import {
@@ -103,8 +103,8 @@ export function EventsPage({ canEdit }: { canEdit: boolean }) {
   }
 
   const today = todayInPrague();
-  const future = filteredEvents.filter((event) => event.date >= today);
-  const past = filteredEvents.filter((event) => event.date < today);
+  const future = filteredEvents.filter((event) => (event.endDate ?? event.date) >= today);
+  const past = filteredEvents.filter((event) => (event.endDate ?? event.date) < today);
 
   return (
     <div className="page">
@@ -347,7 +347,7 @@ function EventRow({
         <span className="event-meta">
           <span>
             <Clock3 aria-hidden="true" />
-            {event.startTime}–{event.endTime}
+            {formatEventTime(event)}
           </span>
           <span>
             <MapPin aria-hidden="true" />
@@ -457,7 +457,7 @@ function EventCalendar({
       <div className="calendar-grid">
         {days.map((day) => {
           const key = format(day, "yyyy-MM-dd");
-          const dayEvents = events.filter((event) => event.date === key);
+          const dayEvents = events.filter((event) => event.date <= key && (event.endDate ?? event.date) >= key);
           return (
             <div
               className={`${isSameMonth(day, month) ? "" : "is-outside"} ${
