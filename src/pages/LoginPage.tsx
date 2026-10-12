@@ -207,7 +207,10 @@ export function LoginPage({
             <BrandMark className="mobile-login-logo" />
             <span className="eyebrow">Tak jdeme na to</span>
             <h2>Přihlášení do aplikace</h2>
-            <p>Přihlaste se e-mailem nebo společným kódem souboru.</p>
+            <p>
+              Pro přihlášení e-mailem musíte mít adresu registrovanou v aplikaci.
+              O registraci požádejte administrátora.
+            </p>
           </div>
 
           <div
@@ -248,7 +251,7 @@ export function LoginPage({
               <>
                 <Field
                   error={error}
-                  hint="Pro členy, kteří mají u svého profilu evidovaný e-mail."
+                  hint="Zadejte svůj registrovaný e-mail."
                   htmlFor="login-email"
                   label="E-mailová adresa"
                 >
@@ -287,8 +290,13 @@ export function LoginPage({
                   Mám přihlašovací kód
                 </Button>
                 <p className="auth-help">
-                  Zpráva obsahuje magic link i šestimístný kód. Můžete použít
-                  jednodušší variantu.
+                  E-mailem dostanete přihlašovací odkaz i šestimístný číselný kód.
+                  Stačí kliknout na odkaz, nebo zde opsat kód místo hesla.
+                </p>
+                <p className="auth-help">
+                  Nemáte teď přístup k e-mailu? Požádejte administrátora o
+                  jednorázový kód. Zadejte svůj registrovaný e-mail a zvolte
+                  „Mám přihlašovací kód“.
                 </p>
               </>
             ) : mode === "email" ? (
@@ -299,9 +307,9 @@ export function LoginPage({
                 </div>
                 <Field
                   error={error}
-                  hint="Kód má šest číslic a omezenou platnost."
+                  hint="Zadejte šest číslic z e-mailu nebo od administrátora. Kód má omezenou platnost."
                   htmlFor="login-otp"
-                  label="Kód z e-mailu"
+                  label="Přihlašovací kód"
                 >
                   <div className="input-with-icon otp-input">
                     <KeyRound aria-hidden="true" />
@@ -328,8 +336,9 @@ export function LoginPage({
                   <ArrowRight aria-hidden="true" />
                 </Button>
                 <p className="auth-help">
-                  Můžete také otevřít tlačítko v e-mailu. Když se odkaz otevře v
-                  okně pošty, vraťte se sem a opište kód.
+                  Kód zadáváte místo hesla. Pokud máte přístup k e-mailu, můžete
+                  také kliknout na přihlašovací odkaz ve zprávě. Když se odkaz
+                  otevře v okně pošty, vraťte se sem a opište kód.
                 </p>
                 <div className="email-login-actions">
                   <Button
@@ -383,6 +392,10 @@ export function LoginPage({
                 </p>
               </>
             )}
+            <p className="auth-help">
+              Na tomto zařízení zůstanete přihlášeni dlouhodobě, takže se nemusíte
+              přihlašovat při každém otevření aplikace.
+            </p>
           </form>
         </div>
         <p className="login-footer">

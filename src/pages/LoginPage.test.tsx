@@ -36,7 +36,7 @@ describe("LoginPage", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Mám přihlašovací kód" }),
     );
-    fireEvent.change(screen.getByLabelText("Kód z e-mailu"), {
+    fireEvent.change(screen.getByLabelText("Přihlašovací kód"), {
       target: { value: "123456" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Ověřit a přihlásit" }));
@@ -63,7 +63,7 @@ describe("LoginPage", () => {
     expect(screen.getByText("clen@example.cz")).toBeInTheDocument();
     expect(screen.getByText(/odkaz i šestimístný kód/i)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Kód z e-mailu"), {
+    fireEvent.change(screen.getByLabelText("Přihlašovací kód"), {
       target: { value: "12a3456" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Ověřit a přihlásit" }));
@@ -116,8 +116,8 @@ describe("LoginPage", () => {
       target: { value: "clen@example.cz" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Poslat odkaz a kód" }));
-    await screen.findByLabelText("Kód z e-mailu");
-    fireEvent.change(screen.getByLabelText("Kód z e-mailu"), {
+    await screen.findByLabelText("Přihlašovací kód");
+    fireEvent.change(screen.getByLabelText("Přihlašovací kód"), {
       target: { value: "123456" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Ověřit a přihlásit" }));
