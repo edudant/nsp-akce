@@ -1,3 +1,4 @@
+import { CarolRecordings } from "../components/CarolRecordings";
 import { useSongFavorites } from "../lib/songFavorites";
 import { SongFavoriteButton } from "../components/SongFavoriteButton";
 import { TextReaderControls } from "../components/TextReaderControls";
@@ -89,6 +90,7 @@ export function SongTextPage({
           Oblíbené se nepodařilo načíst nebo uložit. Zkuste to znovu.
         </p>
       )}
+      {song.kind === "carol" && <CarolRecordings songId={song.id} />}
       {text.data ? (
         <>
           <TextReaderControls

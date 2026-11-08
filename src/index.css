@@ -7215,3 +7215,9 @@ tbody tr:hover {
 .calendar-subscription > div > a.button { max-width: 100%; text-align: left; }
 .calendar-subscription > div > a.button svg { flex-shrink: 0; }
 .calendar-subscription details { margin-block: .75rem; }
+
+.carol-recordings h2 { margin-top: 0; }
+.carol-recording { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; padding: .5rem 0; border-bottom: 1px solid var(--border-soft); }
+.carol-recording > span { flex: 1 1 12rem; }
+.carol-recording audio { width: min(100%, 22rem); height: 40px; }
+.carol-recording p { flex-basis: 100%; }

@@ -1,3 +1,4 @@
+import { CarolRecordings } from "../components/CarolRecordings";
 import { useSongFavorites } from "../lib/songFavorites";
 import { SongFavoriteButton } from "../components/SongFavoriteButton";
 import { useState } from "react";
@@ -197,6 +198,7 @@ export function TextsPage({
         )}
         {!items.length && <p>Žádné položky pro vybraný filtr.</p>}
       </Card>
+      {kind === "carol" && <CarolRecordings />}
       {canEdit && (
         <Dialog
           open={adding}
